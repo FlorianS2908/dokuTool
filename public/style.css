@@ -1,0 +1,283 @@
+:root {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --text: #172033;
+  --muted: #64748b;
+  --line: #d8e0ee;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --soft: #eef4ff;
+  --green: #15803d;
+  --green-bg: #dcfce7;
+  --yellow: #a16207;
+  --yellow-bg: #fef3c7;
+  --red: #b91c1c;
+  --red-bg: #fee2e2;
+  --gray: #475569;
+  --gray-bg: #e2e8f0;
+  font-family: Inter, Aptos, Calibri, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background: radial-gradient(circle at top left, #dbeafe 0, transparent 32rem), var(--bg);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 330px 1fr;
+}
+
+.sidebar {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  font-weight: 800;
+}
+
+h1, h2, p { margin: 0; }
+
+.brand h1 { font-size: 1.2rem; }
+.brand p { color: #cbd5e1; font-size: .92rem; margin-top: 4px; }
+
+.tabs {
+  display: grid;
+  gap: 10px;
+}
+
+.tab,
+button {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab {
+  background: rgba(255,255,255,.08);
+  color: #e2e8f0;
+  text-align: left;
+}
+
+.tab.active {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.hint {
+  line-height: 1.5;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  padding: 16px;
+  color: #e2e8f0;
+}
+
+.hint.soft { color: #cbd5e1; }
+
+.panel {
+  display: none;
+  padding: 28px;
+  overflow: auto;
+}
+
+.panel.visible { display: block; }
+
+.panel-header {
+  background: rgba(255,255,255,.72);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .08);
+}
+
+.panel-header h2 { font-size: 1.6rem; margin-bottom: 4px; }
+.panel-header p { color: var(--muted); }
+
+.analyze-form,
+.chat-controls {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 20px;
+  margin-bottom: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
+}
+
+.grid { display: grid; gap: 14px; margin-bottom: 14px; }
+.grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+label { display: grid; gap: 7px; color: #334155; font-weight: 700; }
+
+input, select, textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: var(--text);
+  font: inherit;
+  background: #fff;
+}
+
+textarea { resize: vertical; }
+
+.file-card {
+  border: 1px dashed #9db2d6;
+  border-radius: 18px;
+  padding: 16px;
+  background: #f8fbff;
+}
+
+.file-card span { color: var(--text); }
+small { color: var(--muted); font-weight: 500; }
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 16px;
+}
+.checkbox input { width: auto; }
+
+.actions { display: flex; gap: 12px; flex-wrap: wrap; }
+button {
+  background: var(--primary);
+  color: white;
+}
+button:hover:not(:disabled) { background: var(--primary-dark); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button.secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+button.secondary:hover:not(:disabled) { background: #cbd5e1; }
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.summary.empty {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  color: var(--muted);
+}
+.metric {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, .05);
+}
+.metric strong { display: block; font-size: 1.5rem; margin-bottom: 4px; }
+.metric span { color: var(--muted); font-size: .92rem; }
+
+.table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: auto;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1100px;
+}
+th, td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
+  font-size: .92rem;
+}
+th {
+  background: #f8fafc;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-weight: 800;
+  font-size: .82rem;
+}
+.badge.gruen { color: var(--green); background: var(--green-bg); }
+.badge.gelb { color: var(--yellow); background: var(--yellow-bg); }
+.badge.rot { color: var(--red); background: var(--red-bg); }
+.badge.grau { color: var(--gray); background: var(--gray-bg); }
+
+.chat-panel { height: 100vh; grid-template-rows: auto auto 1fr auto; }
+.chat-panel.visible { display: grid; }
+.chat-controls { display: grid; gap: 10px; }
+.messages {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 18px;
+  overflow: auto;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
+}
+.message { display: flex; }
+.message.user { justify-content: flex-end; }
+.bubble {
+  max-width: min(820px, 88%);
+  padding: 13px 15px;
+  border-radius: 18px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.message.assistant .bubble { background: #f1f5f9; }
+.message.user .bubble { background: #dbeafe; }
+.composer {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+}
+.composer textarea { min-height: 80px; }
+
+@media (max-width: 1100px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { position: static; }
+  .grid.two, .grid.four, .summary { grid-template-columns: 1fr; }
+  .composer { grid-template-columns: 1fr; }
+}

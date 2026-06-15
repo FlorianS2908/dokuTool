@@ -1,0 +1,8 @@
+node_modules/
+.pnpm-store/
+_tmp_*
+.env
+.DS_Store
+*.log
+reports/
+uploads/

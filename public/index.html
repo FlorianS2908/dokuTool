@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IHK DokuTool</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">DT</div>
+        <div>
+          <h1>IHK DokuTool</h1>
+          <p>Projektantrag ↔ Dokumentation prüfen</p>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="Bereiche">
+        <button class="tab active" data-tab="checker">Doku-Prüfung</button>
+        <button class="tab" data-tab="chat">KI-Chat</button>
+      </nav>
+
+      <section class="hint">
+        <strong>Wichtig:</strong>
+        Für Kopf-/Fußzeilen, Logos und Formatdetails ist DOCX deutlich besser als PDF. PDF wird unterstützt, ist aber bei Layout nur eine Näherung.
+      </section>
+
+      <section class="hint soft">
+        Dieses Tool prüft automatisiert. Es ersetzt keine verbindliche IHK-Bewertung und erzeugt keine fertige Projektdokumentation.
+      </section>
+    </aside>
+
+    <section id="checkerPanel" class="panel visible">
+      <header class="panel-header">
+        <div>
+          <h2>Doku-Prüfung</h2>
+          <p id="analyzeStatus">Bereit</p>
+        </div>
+      </header>
+
+      <form id="analyzeForm" class="analyze-form">
+        <div class="grid two">
+          <label class="file-card">
+            <span>Projektdokumentation *</span>
+            <input id="documentationFile" name="documentation" type="file" accept=".docx,.pdf,.txt,.md,.markdown" required />
+            <small>DOCX, PDF, TXT oder MD</small>
+          </label>
+
+          <label class="file-card">
+            <span>Projektantrag</span>
+            <input id="applicationFile" name="application" type="file" accept=".docx,.pdf,.txt,.md,.markdown" />
+            <small>Optional, aber für den Antrag-Doku-Abgleich empfohlen</small>
+          </label>
+        </div>
+
+        <div class="grid four">
+          <label>
+            Projekttitel
+            <input id="projectTitle" name="projectTitle" placeholder="z. B. Entwicklung einer ..." />
+          </label>
+          <label>
+            Ersteller
+            <input id="author" name="author" placeholder="Name des Prüflings" />
+          </label>
+          <label>
+            Firma/Betrieb
+            <input id="company" name="company" placeholder="Ausbildungsbetrieb" />
+          </label>
+          <label>
+            IHK-Profil
+            <select id="ihkProfile" name="ihkProfile">
+              <option value="allgemein">Allgemein</option>
+              <option value="koeln">IHK Köln</option>
+              <option value="hanau">IHK Hanau</option>
+              <option value="wuerzburg">IHK Würzburg</option>
+              <option value="stuttgart">IHK Stuttgart</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="checkbox">
+          <input id="useAi" name="useAi" type="checkbox" checked />
+          KI-Zusatzprüfung nutzen, wenn API-Key vorhanden ist
+        </label>
+
+        <div class="actions">
+          <button id="analyzeButton" type="submit">Prüfung starten</button>
+          <button id="downloadExcelButton" type="button" class="secondary" disabled>Excel-Bericht</button>
+          <button id="downloadJsonButton" type="button" class="secondary" disabled>JSON</button>
+        </div>
+      </form>
+
+      <section id="summary" class="summary empty">
+        <p>Noch kein Bericht vorhanden.</p>
+      </section>
+
+      <section class="table-wrap">
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th>Kategorie</th>
+              <th>Prüfkriterium</th>
+              <th>Status</th>
+              <th>Bewertung</th>
+              <th>Fundstelle</th>
+              <th>Empfehlung</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </section>
+
+    <section id="chatPanel" class="panel chat-panel">
+      <header class="panel-header">
+        <div>
+          <h2>KI-Chat</h2>
+          <p id="status">Bereit</p>
+        </div>
+      </header>
+
+      <div class="chat-controls">
+        <label for="mode">Arbeitsmodus</label>
+        <select id="mode">
+          <option value="ihk">IHK-Doku-Prüfung</option>
+          <option value="allgemein">Allgemein</option>
+          <option value="programmierung">Programmierung</option>
+          <option value="dokumentation">Dokumentation</option>
+          <option value="unterricht">Unterricht</option>
+          <option value="bewerbung">Bewerbung</option>
+        </select>
+        <label for="context">Zusatzkontext</label>
+        <textarea id="context" rows="4" placeholder="Optional: Projektinfos, Zielgruppe, TechStack, Dokumentationsstil ..."></textarea>
+        <button id="clearButton" class="secondary" type="button">Chat leeren</button>
+      </div>
+
+      <section id="messages" class="messages">
+        <article class="message assistant">
+          <div class="bubble">
+            Hallo Florian, ich bin dein integrierter Assistent. Du kannst hier gezielt Fragen zu IHK-Doku, Code oder Formulierungen stellen.
+          </div>
+        </article>
+      </section>
+
+      <form id="chatForm" class="composer">
+        <textarea id="messageInput" rows="3" placeholder="Schreibe deine Anfrage ..." required></textarea>
+        <button id="sendButton" type="submit">Senden</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
