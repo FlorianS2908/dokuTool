@@ -67,6 +67,52 @@
     </section>
   </div>
 
+  <section id="workspaceView" class="workspace-view hidden">
+    <div class="workspace-shell">
+      <header class="workspace-header">
+        <div>
+          <div class="auth-logo">DT</div>
+          <h1>Arbeitsbereich</h1>
+          <p id="workspaceGreeting">Willkommen</p>
+        </div>
+      </header>
+
+      <div class="tool-grid" aria-label="Tool-Auswahl">
+        <button id="openDokuToolButton" class="tool-tile" type="button">
+          <span class="tool-mark">DT</span>
+          <span>
+            <strong>DokuTool</strong>
+            <small>Aktiv</small>
+          </span>
+        </button>
+
+        <button id="openQuizToolButton" class="tool-tile" type="button">
+          <span class="tool-mark muted">QT</span>
+          <span>
+            <strong>QuizTool</strong>
+            <small>In Vorbereitung</small>
+          </span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="quizView" class="quiz-view hidden">
+    <div class="workspace-shell">
+      <header class="workspace-header">
+        <div>
+          <div class="auth-logo">QT</div>
+          <h1>QuizTool</h1>
+          <p>In Vorbereitung</p>
+        </div>
+      </header>
+      <div class="coming-soon">
+        <strong>QuizTool kommt als naechstes.</strong>
+        <button id="backToWorkspaceButton" class="secondary" type="button">Zurueck</button>
+      </div>
+    </div>
+  </section>
+
   <main id="appShell" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand">
@@ -78,6 +124,7 @@
       </div>
 
       <nav class="tabs" aria-label="Bereiche">
+        <button id="backToWorkspaceFromDokuButton" class="tab workspace-tab" type="button">Tool-Auswahl</button>
         <button class="tab active" data-tab="checker">Doku-Prüfung</button>
         <button class="tab" data-tab="history">History</button>
         <button class="tab" data-tab="chat">KI-Chat</button>

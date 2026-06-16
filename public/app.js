@@ -1,5 +1,12 @@
 const appShell = document.querySelector('#appShell');
 const authView = document.querySelector('#authView');
+const workspaceView = document.querySelector('#workspaceView');
+const quizView = document.querySelector('#quizView');
+const workspaceGreeting = document.querySelector('#workspaceGreeting');
+const openDokuToolButton = document.querySelector('#openDokuToolButton');
+const openQuizToolButton = document.querySelector('#openQuizToolButton');
+const backToWorkspaceButton = document.querySelector('#backToWorkspaceButton');
+const backToWorkspaceFromDokuButton = document.querySelector('#backToWorkspaceFromDokuButton');
 const authForm = document.querySelector('#authForm');
 const authTitle = document.querySelector('#authTitle');
 const authSubtitle = document.querySelector('#authSubtitle');
@@ -29,7 +36,7 @@ const panels = {
   history: document.querySelector('#historyPanel'),
   chat: document.querySelector('#chatPanel')
 };
-const tabs = document.querySelectorAll('.tab');
+const tabs = document.querySelectorAll('.tab[data-tab]');
 
 const analyzeForm = document.querySelector('#analyzeForm');
 const analyzeButton = document.querySelector('#analyzeButton');
@@ -134,19 +141,45 @@ function renderUser(user) {
 function showAuth(message = '') {
   currentUser = null;
   authView.classList.remove('hidden');
+  workspaceView.classList.add('hidden');
+  quizView.classList.add('hidden');
   appShell.classList.add('hidden');
   profileWidget.classList.add('hidden');
   profileDropdown.classList.add('hidden');
   authStatus.textContent = message;
 }
 
-function showApp(user) {
+function showWorkspace(user = currentUser) {
+  if (user) renderUser(user);
+  workspaceGreeting.textContent = currentUser?.displayName
+    ? `Willkommen, ${currentUser.displayName}`
+    : 'Willkommen';
+  authView.classList.add('hidden');
+  workspaceView.classList.remove('hidden');
+  quizView.classList.add('hidden');
+  appShell.classList.add('hidden');
+  profileWidget.classList.remove('hidden');
+  profileDropdown.classList.add('hidden');
+}
+
+function showDokuTool(user = currentUser) {
   renderUser(user);
   authView.classList.add('hidden');
+  workspaceView.classList.add('hidden');
+  quizView.classList.add('hidden');
   appShell.classList.remove('hidden');
   profileWidget.classList.remove('hidden');
   loadChatHistory();
   loadHistory();
+}
+
+function showQuizTool() {
+  authView.classList.add('hidden');
+  workspaceView.classList.add('hidden');
+  appShell.classList.add('hidden');
+  quizView.classList.remove('hidden');
+  profileWidget.classList.remove('hidden');
+  profileDropdown.classList.add('hidden');
 }
 
 function setAuthMode(nextMode) {
@@ -194,7 +227,7 @@ authForm.addEventListener('submit', async (event) => {
       })
     });
     passwordInput.value = '';
-    showApp(data.user);
+    showWorkspace(data.user);
   } catch (error) {
     authStatus.textContent = error.message;
   } finally {
@@ -251,6 +284,22 @@ logoutButton.addEventListener('click', async () => {
   currentReport = null;
   history = [];
   showAuth('Du wurdest abgemeldet.');
+});
+
+openDokuToolButton.addEventListener('click', () => {
+  showDokuTool();
+});
+
+openQuizToolButton.addEventListener('click', () => {
+  showQuizTool();
+});
+
+backToWorkspaceButton.addEventListener('click', () => {
+  showWorkspace();
+});
+
+backToWorkspaceFromDokuButton.addEventListener('click', () => {
+  showWorkspace();
 });
 
 function setAnalyzeLoading(isLoading) {
@@ -542,7 +591,7 @@ async function loadSession() {
   setAuthMode('login');
   try {
     const data = await apiFetch('/api/auth/me');
-    showApp(data.user);
+    showWorkspace(data.user);
   } catch {
     showAuth();
   }

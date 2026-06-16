@@ -132,6 +132,92 @@ body {
 
 .upload-button input { display: none; }
 
+.workspace-view,
+.quiz-view {
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.workspace-shell {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+}
+
+.workspace-header {
+  background: rgba(255,255,255,.82);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px 84px 24px 24px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .08);
+}
+
+.workspace-header h1 {
+  font-size: 1.7rem;
+  margin-bottom: 5px;
+}
+
+.workspace-header p { color: var(--muted); }
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tool-tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  min-height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
+}
+
+.tool-tile:hover:not(:disabled) {
+  background: #f8fbff;
+  border-color: #9db2d6;
+}
+
+.tool-mark {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.tool-mark.muted {
+  background: #475569;
+}
+
+.tool-tile strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+
+.coming-soon {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -191,6 +277,11 @@ button {
 .tab.active {
   background: #ffffff;
   color: #0f172a;
+}
+
+.workspace-tab {
+  background: rgba(255,255,255,.14);
+  color: #f8fafc;
 }
 
 .hint {
@@ -468,4 +559,8 @@ th {
   .history-layout { grid-template-columns: 1fr; }
   .panel-header { padding-right: 22px; }
   .profile-widget { top: 12px; right: 12px; }
+  .workspace-view,
+  .quiz-view { padding: 20px; }
+  .workspace-header { padding-right: 72px; }
+  .tool-grid { grid-template-columns: 1fr; }
 }
