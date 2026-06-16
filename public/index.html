@@ -7,7 +7,67 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="app-shell">
+  <section id="authView" class="auth-view">
+    <form id="authForm" class="auth-card">
+      <div>
+        <div class="auth-logo">DT</div>
+        <h1 id="authTitle">Einloggen</h1>
+        <p id="authSubtitle">Melde dich an, um das IHK DokuTool zu nutzen.</p>
+      </div>
+
+      <label id="displayNameLabel" class="hidden">
+        Name
+        <input id="displayNameInputAuth" name="displayName" autocomplete="name" placeholder="Dein Name" />
+      </label>
+
+      <label>
+        E-Mail
+        <input id="emailInput" name="email" type="email" autocomplete="email" required />
+      </label>
+
+      <label>
+        Passwort
+        <input id="passwordInput" name="password" type="password" autocomplete="current-password" minlength="8" required />
+      </label>
+
+      <p id="authStatus" class="status-line"></p>
+
+      <button id="authSubmitButton" type="submit">Einloggen</button>
+      <button id="authToggleButton" class="secondary" type="button">Neu registrieren</button>
+    </form>
+  </section>
+
+  <div id="profileWidget" class="profile-widget hidden">
+    <button id="profileButton" class="profile-button" type="button" title="Profil">
+      <img id="profileAvatarImage" class="hidden" alt="Profilfoto" />
+      <span id="profileInitials">?</span>
+    </button>
+
+    <section id="profileDropdown" class="profile-dropdown hidden">
+      <div>
+        <strong id="profileName">Profil</strong>
+        <small id="profileEmail"></small>
+      </div>
+
+      <label>
+        Anzeigename
+        <input id="profileDisplayNameInput" autocomplete="name" />
+      </label>
+
+      <div class="profile-actions">
+        <button id="saveProfileButton" type="button">Speichern</button>
+        <label class="upload-button">
+          Foto
+          <input id="profilePhotoInput" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+      </div>
+
+      <p id="profileStatus" class="status-line"></p>
+      <button id="logoutButton" class="secondary" type="button">Abmelden</button>
+    </section>
+  </div>
+
+  <main id="appShell" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand">
         <div class="logo">DT</div>
@@ -19,6 +79,7 @@
 
       <nav class="tabs" aria-label="Bereiche">
         <button class="tab active" data-tab="checker">Doku-Prüfung</button>
+        <button class="tab" data-tab="history">History</button>
         <button class="tab" data-tab="chat">KI-Chat</button>
       </nav>
 
@@ -110,6 +171,29 @@
           </thead>
           <tbody></tbody>
         </table>
+      </section>
+    </section>
+
+    <section id="historyPanel" class="panel history-panel">
+      <header class="panel-header">
+        <div>
+          <h2>History</h2>
+          <p id="historyStatus">Noch keine gespeicherten Berichte geladen.</p>
+        </div>
+      </header>
+
+      <section class="history-layout">
+        <div class="history-list-wrap">
+          <div class="history-list-header">
+            <h3>Pruefberichte</h3>
+            <button id="refreshHistoryButton" class="secondary" type="button">Aktualisieren</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </div>
+
+        <div id="historyDetail" class="history-detail empty">
+          <p>Waehle einen Bericht aus der History.</p>
+        </div>
       </section>
     </section>
 

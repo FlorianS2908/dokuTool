@@ -7,21 +7,148 @@ import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
+import { createHmac, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
+import { createDataStore, toPublicUser } from './data-store.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const model = process.env.OPENAI_MODEL || 'gpt-5.5';
 const maxOutputTokens = Number(process.env.MAX_OUTPUT_TOKENS || 1800);
 const uploadLimitMb = Number(process.env.UPLOAD_LIMIT_MB || 30);
+const profilePhotoLimitMb = Number(process.env.PROFILE_PHOTO_LIMIT_MB || 0.5);
+const dataStore = await createDataStore();
+const sessionSecret = process.env.AUTH_SESSION_SECRET || randomBytes(48).toString('hex');
+const sessionCookieName = 'ihk_dokutool_session';
+const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: uploadLimitMb * 1024 * 1024 }
 });
 
+const profileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: profilePhotoLimitMb * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(png|jpeg|webp)$/.test(file.mimetype)) return cb(null, true);
+    cb(new Error('Bitte ein PNG-, JPG- oder WebP-Bild hochladen.'));
+  }
+});
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
+
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString('base64url');
+}
+
+function base64UrlDecode(value) {
+  return Buffer.from(value, 'base64url').toString('utf8');
+}
+
+function sign(value) {
+  return createHmac('sha256', sessionSecret).update(value).digest('base64url');
+}
+
+function parseCookies(header = '') {
+  return Object.fromEntries(
+    header
+      .split(';')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf('=');
+        if (index === -1) return [part, ''];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      })
+  );
+}
+
+function createSessionToken(userId) {
+  const payload = base64UrlEncode(JSON.stringify({
+    userId,
+    expiresAt: Date.now() + sessionMaxAgeSeconds * 1000
+  }));
+  return `${payload}.${sign(payload)}`;
+}
+
+function readSessionToken(req) {
+  const cookies = parseCookies(req.headers.cookie || '');
+  return cookies[sessionCookieName] || '';
+}
+
+function verifySessionToken(token) {
+  const [payload, signature] = String(token || '').split('.');
+  if (!payload || !signature || sign(payload) !== signature) return null;
+
+  try {
+    const data = JSON.parse(base64UrlDecode(payload));
+    if (!data.userId || !data.expiresAt || Date.now() > data.expiresAt) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function setSessionCookie(res, userId) {
+  const token = createSessionToken(userId);
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `${sessionCookieName}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${sessionMaxAgeSeconds}${secure}`
+  );
+}
+
+function clearSessionCookie(res) {
+  res.setHeader(
+    'Set-Cookie',
+    `${sessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
+  );
+}
+
+function normalizeEmailInput(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validatePassword(password) {
+  return typeof password === 'string' && password.length >= 8;
+}
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString('base64url');
+  const iterations = 310000;
+  const hash = pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('base64url');
+  return { passwordHash: hash, passwordSalt: salt, passwordIterations: iterations };
+}
+
+function verifyPassword(password, user) {
+  if (!user?.passwordHash || !user?.passwordSalt || !user?.passwordIterations) return false;
+  const expected = Buffer.from(user.passwordHash, 'base64url');
+  const actual = pbkdf2Sync(password, user.passwordSalt, user.passwordIterations, expected.length, 'sha256');
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+async function getSessionUser(req) {
+  const session = verifySessionToken(readSessionToken(req));
+  if (!session) return null;
+  return dataStore.getUser(session.userId);
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    const user = await getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Bitte einloggen.' });
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
 
 function createClient() {
   if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dein_api_key_hier') {
@@ -909,10 +1036,109 @@ async function createExcel(report) {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, model, uploadLimitMb });
+  res.json({
+    ok: true,
+    model,
+    uploadLimitMb,
+    auth: true,
+    storage: dataStore.kind,
+    profilePhotoLimitMb
+  });
 });
 
-app.post('/api/chat', async (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Nicht eingeloggt.' });
+  res.json({ user: toPublicUser(user) });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const email = normalizeEmailInput(req.body?.email);
+    const password = String(req.body?.password || '');
+    const displayName = String(req.body?.displayName || '').trim();
+
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Bitte eine gueltige E-Mail-Adresse eingeben.' });
+    }
+    if (!validatePassword(password)) {
+      return res.status(400).json({ error: 'Das Passwort muss mindestens 8 Zeichen lang sein.' });
+    }
+
+    const user = await dataStore.createUser({
+      email,
+      displayName: displayName || email.split('@')[0],
+      photo: null,
+      ...hashPassword(password)
+    });
+
+    setSessionCookie(res, user.id);
+    res.status(201).json({ user: toPublicUser(user) });
+  } catch (error) {
+    if (error.code === 'EMAIL_EXISTS') {
+      return res.status(409).json({ error: error.message });
+    }
+    console.error(error);
+    res.status(500).json({ error: 'Registrierung konnte nicht gespeichert werden.' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const email = normalizeEmailInput(req.body?.email);
+    const password = String(req.body?.password || '');
+    const user = await dataStore.findUserByEmail(email);
+
+    if (!user || !verifyPassword(password, user)) {
+      return res.status(401).json({ error: 'E-Mail oder Passwort ist falsch.' });
+    }
+
+    setSessionCookie(res, user.id);
+    res.json({ user: toPublicUser(user) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Login konnte nicht verarbeitet werden.' });
+  }
+});
+
+app.post('/api/auth/logout', (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.patch('/api/profile', requireAuth, async (req, res) => {
+  const displayName = String(req.body?.displayName || '').trim();
+  if (!displayName) return res.status(400).json({ error: 'Bitte einen Namen eingeben.' });
+
+  const user = await dataStore.updateUserProfile(req.user.id, { displayName });
+  res.json({ user: toPublicUser(user) });
+});
+
+app.post('/api/profile/photo', requireAuth, profileUpload.single('photo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Bitte ein Profilbild hochladen.' });
+
+  const photo = {
+    dataUrl: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`,
+    mimeType: req.file.mimetype,
+    size: req.file.size,
+    updatedAt: new Date().toISOString()
+  };
+  const user = await dataStore.updateUserProfile(req.user.id, { photo });
+  res.json({ user: toPublicUser(user) });
+});
+
+app.get('/api/reports', requireAuth, async (req, res) => {
+  const reports = await dataStore.listReports(req.user.id);
+  res.json({ reports });
+});
+
+app.get('/api/reports/:id', requireAuth, async (req, res) => {
+  const entry = await dataStore.getReport(req.user.id, req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Bericht nicht gefunden.' });
+  res.json({ report: entry.report, meta: entry });
+});
+
+app.post('/api/chat', requireAuth, async (req, res) => {
   try {
     const { message, mode = 'allgemein', history = [], context = '' } = req.body || {};
 
@@ -939,7 +1165,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.post('/api/analyze', upload.fields([
+app.post('/api/analyze', requireAuth, upload.fields([
   { name: 'documentation', maxCount: 1 },
   { name: 'application', maxCount: 1 }
 ]), async (req, res) => {
@@ -982,6 +1208,15 @@ app.post('/api/analyze', upload.fields([
       report.ai = { used: false, reason: 'KI-Prüfung im Formular deaktiviert.' };
     }
 
+    const savedReport = await dataStore.createReport(req.user.id, {
+      projectTitle: options.projectTitle || doc.fileName,
+      documentFileName: doc.fileName,
+      applicationFileName: AntragDoc?.fileName || '',
+      ihkProfile: options.ihkProfile,
+      report
+    });
+    report.historyId = savedReport.id;
+
     res.json(report);
   } catch (error) {
     console.error(error);
@@ -989,7 +1224,7 @@ app.post('/api/analyze', upload.fields([
   }
 });
 
-app.post('/api/report/excel', async (req, res) => {
+app.post('/api/report/excel', requireAuth, async (req, res) => {
   try {
     const report = req.body;
     if (!report?.results || !report?.summary) {
@@ -1003,6 +1238,11 @@ app.post('/api/report/excel', async (req, res) => {
     console.error(error);
     res.status(500).json({ error: error?.message || 'Excel-Bericht konnte nicht erzeugt werden.' });
   }
+});
+
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(500).json({ error: error?.message || 'Unbekannter Serverfehler.' });
 });
 
 app.listen(port, () => {

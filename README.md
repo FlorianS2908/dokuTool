@@ -1,29 +1,25 @@
 # IHK DokuTool
 
-Lokales Web-Tool zur Vorprüfung einer IHK-Projektdokumentation gegen formale und inhaltliche Kriterien. Das Tool kombiniert regelbasierte Prüfung mit optionaler OpenAI-KI-Zusatzprüfung.
+Lokales Web-Tool zur Vorpruefung einer IHK-Projektdokumentation gegen formale und inhaltliche Kriterien. Das Tool kombiniert regelbasierte Pruefung mit optionaler OpenAI-KI-Zusatzpruefung, Benutzerkonten, Profilen und Bericht-History.
 
-## Was das Tool prüft
+## Was das Tool prueft
 
-- Inhaltsverzeichnis vorhanden und plausibel vollständig
+- Inhaltsverzeichnis vorhanden und plausibel vollstaendig
 - Abbildungsverzeichnis, wenn Abbildungen genutzt werden
 - Tabellenverzeichnis, wenn Tabellen genutzt werden
-- Abkürzungsverzeichnis
+- Abkuerzungsverzeichnis
 - Fremdwortverzeichnis / Glossar
 - Literatur- oder Quellenverzeichnis
 - Listingverzeichnis, wenn Code/Listings genutzt werden
-- Anhangsverzeichnis, wenn Anhänge genutzt werden
+- Anhangsverzeichnis, wenn Anhaenge genutzt werden
 - Deckblatt mit Name, Firma/Betrieb, Projekttitel, Ausbilder und Projektbetreuer
 - Kopfzeile mit Projekttitel und Firmenlogo
-- Fußzeile mit Seitenzahl und Name des Dokumentationserstellers
+- Fusszeile mit Seitenzahl und Name des Dokumentationserstellers
 - UML-Diagramme in Analyse, Planung, Entwurf und Implementierung
-- Testphase / Qualitätssicherung
+- Testphase / Qualitaetssicherung
 - Soll-/Ist-Vergleich
 - Fazit
-- Projektantrag ↔ Dokumentation-Abgleich, wenn der Antrag hochgeladen wird
-
-## Wichtige Einschränkung
-
-Für die beste Formatprüfung bitte die Word-Datei als `.docx` hochladen. PDF wird unterstützt, aber Kopf-/Fußzeilen, Logo, Schriftart, Zeilenabstand und Seitenränder sind in PDF nur eingeschränkt bzw. heuristisch prüfbar.
+- Projektantrag -> Dokumentation-Abgleich, wenn der Antrag hochgeladen wird
 
 ## Installation unter Windows
 
@@ -31,40 +27,24 @@ Für die beste Formatprüfung bitte die Word-Datei als `.docx` hochladen. PDF wi
 
 Installiere Node.js LTS, mindestens Version 20.
 
-Prüfen in PowerShell oder Eingabeaufforderung:
-
 ```bash
 node -v
 npm -v
 ```
 
-Wenn beide Befehle eine Versionsnummer ausgeben, ist Node.js korrekt installiert.
+### 2. Abhaengigkeiten installieren
 
-### 2. ZIP entpacken
-
-Entpacke `florian-ai-tool.zip`, zum Beispiel nach:
-
-```text
-C:\Users\DEIN_NAME\Desktop\ihk-dokutool
-```
-
-Öffne danach den entpackten Ordner in PowerShell oder CMD.
-
-### 3. Abhängigkeiten installieren
-
-Im Projektordner ausführen:
+Im Projektordner ausfuehren:
 
 ```bash
 npm install
 ```
 
-Dabei werden Express, OpenAI SDK, DOCX/PDF-Parser und Excel-Export installiert.
+### 3. Lokale `.env` anlegen
 
-### 4. `.env` anlegen
+Lege im Projektordner eine lokale Datei `.env` an. Diese Datei darf nicht nach GitHub hochgeladen werden.
 
-Kopiere die Datei `.env.example` und benenne die Kopie in `.env` um.
-
-Inhalt der `.env`:
+Minimaler Inhalt:
 
 ```env
 OPENAI_API_KEY=dein_api_key_hier
@@ -74,41 +54,61 @@ MAX_OUTPUT_TOKENS=1800
 UPLOAD_LIMIT_MB=30
 ```
 
-Der API-Key ist nur für die KI-Zusatzprüfung und den Chat nötig. Die regelbasierte Doku-Prüfung funktioniert auch ohne gültigen Key, dann aber ohne semantische KI-Bewertung.
+Der API-Key ist fuer KI-Zusatzpruefung und Chat noetig. Die regelbasierte Doku-Pruefung funktioniert auch ohne gueltigen Key.
 
-### 5. Tool starten
+## Auth, Profile und Firestore
+
+Benutzer koennen sich mit E-Mail und Passwort registrieren. Passwoerter werden serverseitig gehasht gespeichert. Zu jedem Benutzer gibt es ein Profil mit Anzeigenamen, Profilfoto und Bericht-History.
+
+Ohne Firestore-Konfiguration nutzt das Tool lokal `.data/store.json`. Fuer Firestore werden spaeter diese Variablen in `.env` ergaenzt:
+
+```env
+FIRESTORE_ENABLED=true
+FIRESTORE_PROJECT_ID=dein-firebase-projekt
+FIREBASE_SERVICE_ACCOUNT_BASE64=base64-service-account-json
+AUTH_SESSION_SECRET=langes-zufaelliges-secret
+PROFILE_PHOTO_LIMIT_MB=0.5
+```
+
+Die Firestore-Struktur ist vorbereitet:
+
+- `users/{userId}` fuer Profil, Login-Daten und Profilfoto
+- `users/{userId}/reports/{reportId}` fuer gespeicherte Pruefberichte
+
+## Tool starten
 
 ```bash
 npm start
 ```
 
-Danach im Browser öffnen:
+Danach im Browser oeffnen:
 
 ```text
 http://localhost:8080
 ```
 
-Alternativ kannst du unter Windows die Datei `start-windows.bat` doppelklicken. Beim ersten Start muss trotzdem vorher `npm install` ausgeführt worden sein.
+Alternativ unter Windows `start-windows.bat` doppelklicken.
 
 ## Benutzung
 
-1. Reiter **Doku-Prüfung** öffnen.
-2. Projektdokumentation hochladen, am besten als `.docx`.
-3. Optional den Projektantrag hochladen.
-4. Projekttitel, Ersteller und Firma eintragen. Diese Angaben helfen bei der Prüfung von Deckblatt, Kopfzeile und Fußzeile.
-5. Optional KI-Zusatzprüfung aktiv lassen, wenn ein API-Key hinterlegt ist.
-6. **Prüfung starten** klicken.
-7. Bericht im Browser prüfen.
-8. Über **Excel-Bericht** einen `.xlsx`-Prüfbericht herunterladen.
+1. Registrieren oder einloggen.
+2. Reiter **Doku-Pruefung** oeffnen.
+3. Projektdokumentation hochladen, am besten als `.docx`.
+4. Optional den Projektantrag hochladen.
+5. Projekttitel, Ersteller und Firma eintragen.
+6. Optional KI-Zusatzpruefung aktiv lassen, wenn ein API-Key hinterlegt ist.
+7. **Pruefung starten** klicken.
+8. Bericht im Browser pruefen. Der Bericht wird automatisch in der History des eingeloggten Nutzers gespeichert.
+9. Ueber **Excel-Bericht** einen `.xlsx`-Pruefbericht herunterladen.
 
 ## Ergebnisstatus
 
 | Status | Bedeutung |
 | ------ | --------- |
-| Grün | vorhanden und plausibel |
-| Gelb | vorhanden, aber unvollständig oder unklar |
+| Gruen | vorhanden und plausibel |
+| Gelb | vorhanden, aber unvollstaendig oder unklar |
 | Rot | fehlt oder passt nicht |
-| Grau | nicht sicher automatisch prüfbar |
+| Grau | nicht sicher automatisch pruefbar |
 
 ## Projektstruktur
 
@@ -118,9 +118,9 @@ florian-ai-tool/
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
+├── data-store.js
 ├── server.js
 ├── package.json
-├── .env.example
 ├── start-windows.bat
 ├── Dockerfile
 └── README.md
@@ -129,19 +129,21 @@ florian-ai-tool/
 ## Technische Hinweise
 
 - Backend: Node.js + Express
-- Datei-Parsing: Mammoth für DOCX, pdf-parse für PDF, JSZip für DOCX-Struktur
+- Auth: HttpOnly Session-Cookie, PBKDF2 Passwort-Hashing
+- Datenhaltung: lokaler JSON-Store oder Firestore via `firebase-admin`
+- Datei-Parsing: Mammoth fuer DOCX, pdf-parse fuer PDF, JSZip fuer DOCX-Struktur
 - Excel-Export: ExcelJS
-- KI-Anbindung: OpenAI Responses API über das OpenAI SDK
+- KI-Anbindung: OpenAI Responses API ueber das OpenAI SDK
 - API-Key bleibt im Backend und wird nicht im Browser gespeichert
 
 ## Docker optional
 
 ```bash
 docker build -t ihk-dokutool .
-docker run --env-file .env -p 3000:3000 ihk-dokutool
+docker run --env-file .env -p 8080:8080 ihk-dokutool
 ```
 
-Dann öffnen:
+Dann oeffnen:
 
 ```text
 http://localhost:8080
