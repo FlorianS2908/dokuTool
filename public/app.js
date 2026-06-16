@@ -56,6 +56,7 @@ const summaryElement = document.querySelector('#summary');
 const resultTableBody = document.querySelector('#resultTable tbody');
 const downloadExcelButton = document.querySelector('#downloadExcelButton');
 const downloadJsonButton = document.querySelector('#downloadJsonButton');
+const ihkProfileSelect = document.querySelector('#ihkProfile');
 
 const historyStatus = document.querySelector('#historyStatus');
 const historyList = document.querySelector('#historyList');
@@ -76,6 +77,7 @@ let authMode = 'login';
 let currentReport = null;
 let history = [];
 let quizConfig = null;
+let ihkProfilesLoaded = false;
 
 function statusLabel(status) {
   return {
@@ -181,6 +183,7 @@ function showDokuTool(user = currentUser) {
   quizView.classList.add('hidden');
   appShell.classList.remove('hidden');
   profileWidget.classList.remove('hidden');
+  loadIhkProfiles();
   loadChatHistory();
   loadHistory();
 }
@@ -421,6 +424,30 @@ function renderQuestionSchema(schema) {
 function setAnalyzeLoading(isLoading) {
   analyzeButton.disabled = isLoading;
   analyzeStatus.textContent = isLoading ? 'Dokument wird geprueft ...' : 'Bereit';
+}
+
+async function loadIhkProfiles() {
+  if (ihkProfilesLoaded || !ihkProfileSelect) return;
+  try {
+    const currentValue = ihkProfileSelect.value || 'allgemein';
+    const data = await apiFetch('/api/ihk-profiles');
+    const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+    if (!profiles.length) return;
+    ihkProfileSelect.innerHTML = '';
+    for (const profile of profiles) {
+      const option = document.createElement('option');
+      option.value = profile.key;
+      option.textContent = profile.label;
+      option.title = profile.summary || profile.aiPolicy || '';
+      ihkProfileSelect.appendChild(option);
+    }
+    ihkProfileSelect.value = profiles.some((profile) => profile.key === currentValue)
+      ? currentValue
+      : 'allgemein';
+    ihkProfilesLoaded = true;
+  } catch {
+    ihkProfilesLoaded = false;
+  }
 }
 
 function renderSummary(report) {

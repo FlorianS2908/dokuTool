@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import { createHmac, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { createDataStore, toPublicUser } from './data-store.js';
+import { GENERAL_IHK_RULES, getIhkRuleProfile, ihkProfilesForClient } from './ihk-rules.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -282,7 +283,10 @@ const CHECKLIST_REFERENCE = {
     'Mindestens ein als Abbildung vorhandenes UML-Diagramm in Analyse, Planung, Entwurf und Implementierung',
     'Testphase/Qualitätssicherung vorhanden und passend zur Dokumentation',
     'Soll-/Ist-Vergleich vorhanden und passend zur Dokumentation',
-    'Fazit vorhanden'
+    'Fazit vorhanden',
+    'Allgemeine IHK-Regeln angewandt',
+    'Gewaehlte regionale IHK-Regeln angewandt',
+    'KI-Richtlinie und moegliche KI-Fundstellen geprueft'
   ]
 };
 
@@ -450,6 +454,7 @@ async function extractDocx(file) {
   return {
     fileName: file.originalname,
     format: 'docx',
+    fileSizeBytes: file.size || file.buffer.length,
     text: fullText,
     bodyText: documentText,
     headerText,
@@ -479,6 +484,7 @@ async function extractPdf(file) {
   return {
     fileName: file.originalname,
     format: 'pdf',
+    fileSizeBytes: file.size || file.buffer.length,
     text: normalize(data.text || ''),
     bodyText: normalize(data.text || ''),
     headerText: '',
@@ -502,6 +508,7 @@ async function extractTextFile(file) {
   return {
     fileName: file.originalname,
     format: 'text',
+    fileSizeBytes: file.size || file.buffer.length,
     text: normalize(file.buffer.toString('utf8')),
     bodyText: normalize(file.buffer.toString('utf8')),
     headerText: '',
@@ -630,6 +637,358 @@ function addResult(results, category, criterion, status, assessment, evidence, r
     severity,
     weight
   });
+}
+
+function formatFileSize(bytes = 0) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'unbekannt';
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function evidenceList(text, patterns, label = 'Fundstellen', limit = 4) {
+  const snippets = [];
+  const positions = [];
+  for (const pattern of patterns) {
+    const regex = regexWithGlobal(pattern);
+    let match;
+    while ((match = regex.exec(text)) !== null && snippets.length < limit) {
+      if (positions.some((position) => Math.abs(position - match.index) < 180)) continue;
+      positions.push(match.index);
+      snippets.push(excerptAt(text, match.index, 90, 220));
+    }
+    if (snippets.length >= limit) break;
+  }
+  const unique = [...new Set(snippets)];
+  return unique.length
+    ? `${label}: ${unique.map((snippet, index) => `${index + 1}) "${snippet}"`).join(' | ')}`
+    : '-';
+}
+
+function countPatternMatches(text, patterns = []) {
+  return patterns.filter((pattern) => pattern.test(text)).length;
+}
+
+function evaluatePatternRule(results, text, category, rule, defaultSeverity = 'mittel') {
+  if (rule.onlyWhen && !rule.onlyWhen.test(text)) {
+    addResult(
+      results,
+      category,
+      rule.label,
+      'gruen',
+      'nicht erforderlich',
+      'Ausloesender Kontext nicht erkannt.',
+      'Die Regel wird nur angewandt, wenn der passende Kontext im Dokument vorhanden ist.',
+      'Kein unmittelbarer Handlungsbedarf.',
+      'niedrig',
+      0.5
+    );
+    return true;
+  }
+
+  const matches = countPatternMatches(text, rule.patterns || []);
+  const requiredMatches = rule.minMatches || 1;
+  const ok = matches >= requiredMatches;
+  const status = ok ? 'gruen' : rule.soft ? 'gelb' : 'rot';
+  addResult(
+    results,
+    category,
+    rule.label,
+    status,
+    ok ? 'erkannt' : rule.soft ? 'nicht sicher erkannt' : 'nicht erkannt',
+    ok ? evidenceList(text, rule.patterns, rule.label, 3) : '-',
+    ok
+      ? 'Die Regel wurde anhand typischer Begriffe oder Fundstellen im Dokument erkannt.'
+      : `Die Regel wurde nicht ausreichend erkannt (${matches}/${requiredMatches} Treffergruppen).`,
+    ok ? 'Fundstelle kurz gegen die konkrete IHK-Vorgabe pruefen.' : rule.recommendation,
+    ok ? 'niedrig' : defaultSeverity,
+    rule.soft ? 0.7 : 1
+  );
+  return ok;
+}
+
+function evaluateIhkPageRule(results, doc, profile) {
+  if (!profile.page) return;
+  const page = profile.page;
+  const ruleText = [
+    page.min ? `min. ${page.min}` : null,
+    page.max ? `max. ${page.max}` : null,
+    page.totalMax ? `Gesamt max. ${page.totalMax}` : null,
+    page.appendixMax ? `Anlagen max. ${page.appendixMax}` : null,
+    page.scope ? `Geltung: ${page.scope}` : null
+  ].filter(Boolean).join('; ');
+
+  if (!doc.pageCount) {
+    addResult(
+      results,
+      'IHK-Profilregeln',
+      `Seitenumfang nach ${profile.label}`,
+      'grau',
+      'nicht automatisch zaehlbar',
+      `Regel: ${ruleText}. Dateiformat: ${doc.format}.`,
+      'Der Seitenumfang kann fuer dieses Format nicht belastbar automatisch bestimmt werden.',
+      'PDF oder final gesetztes DOCX manuell gegen die regionale Seitenregel pruefen.',
+      'mittel'
+    );
+    return;
+  }
+
+  let status = 'gruen';
+  let assessment = 'im automatisch pruefbaren Rahmen';
+  let reason = `Automatisch erkannte Gesamtseiten: ${doc.pageCount}. Regel: ${ruleText}.`;
+  if (page.totalMax && doc.pageCount > page.totalMax) {
+    status = 'rot';
+    assessment = 'Gesamtumfang ueberschritten';
+    reason = `Die PDF hat ${doc.pageCount} Seiten und liegt ueber dem Gesamtlimit von ${page.totalMax}.`;
+  } else if (page.max && doc.pageCount > page.max) {
+    status = 'gelb';
+    assessment = 'moeglicherweise zu umfangreich';
+    reason = `Die PDF hat ${doc.pageCount} Gesamtseiten. Die IHK-Regel bezieht sich auf ${page.scope || 'den Projektbericht'}; Anlagen/Verzeichnisse koennen automatisch nicht sauber getrennt werden.`;
+  } else if (page.min && doc.pageCount < page.min) {
+    status = 'gelb';
+    assessment = 'moeglicherweise zu kurz';
+    reason = `Die PDF hat ${doc.pageCount} Gesamtseiten und liegt unter der Mindestorientierung von ${page.min}.`;
+  }
+
+  addResult(
+    results,
+    'IHK-Profilregeln',
+    `Seitenumfang nach ${profile.label}`,
+    status,
+    assessment,
+    `Erkannte Seiten: ${doc.pageCount}. Regel: ${ruleText}.`,
+    reason,
+    status === 'gruen' ? 'Keine unmittelbare Nacharbeit erkennbar.' : 'Reinen Projektbericht, Verzeichnisse und Anlagen manuell trennen und gegen die regionale Vorgabe pruefen.',
+    status === 'rot' ? 'hoch' : 'mittel'
+  );
+}
+
+function evaluateIhkFileSizeRule(results, doc, profile) {
+  if (!profile.pdfMaxMb) return;
+  if (doc.format !== 'pdf') {
+    addResult(
+      results,
+      'IHK-Profilregeln',
+      `PDF-Dateigroesse nach ${profile.label}`,
+      'grau',
+      'nur fuer finale PDF pruefbar',
+      `Regel: PDF max. ${profile.pdfMaxMb} MB. Aktuelles Format: ${doc.format}.`,
+      'Die regionale Dateigroesse bezieht sich auf die Abgabe-PDF.',
+      'Finale PDF erzeugen und erneut pruefen.',
+      'mittel',
+      0.7
+    );
+    return;
+  }
+
+  const sizeMb = (doc.fileSizeBytes || 0) / 1024 / 1024;
+  const ok = sizeMb <= profile.pdfMaxMb;
+  addResult(
+    results,
+    'IHK-Profilregeln',
+    `PDF-Dateigroesse nach ${profile.label}`,
+    ok ? 'gruen' : 'rot',
+    ok ? 'im Limit' : 'Limit ueberschritten',
+    `Dateigroesse: ${formatFileSize(doc.fileSizeBytes)}. Regel: max. ${profile.pdfMaxMb} MB.`,
+    ok ? 'Die Datei liegt innerhalb des hinterlegten PDF-Limits.' : 'Die Datei liegt ueber dem hinterlegten PDF-Limit der gewaehlten IHK.',
+    ok ? 'Keine unmittelbare Nacharbeit erkennbar.' : 'PDF komprimieren, Anlagen reduzieren oder regionale Uploadvorgabe pruefen.',
+    ok ? 'niedrig' : 'hoch'
+  );
+}
+
+function evaluateIhkRules({ results, doc, text, profile }) {
+  addResult(
+    results,
+    'IHK-Profilregeln',
+    'Ausgewaehltes IHK-Regelprofil',
+    'gruen',
+    profile.label,
+    profile.summary || 'Regelprofil hinterlegt.',
+    'Allgemeine Regeln werden immer angewandt; regionale Regeln werden entsprechend dem Dropdown-Profil zusaetzlich angewandt.',
+    'Vor Abgabe immer die aktuelle Fassung der zustaendigen IHK gegenpruefen.',
+    'niedrig',
+    0.4
+  );
+
+  for (const rule of GENERAL_IHK_RULES) {
+    evaluatePatternRule(results, text, 'Allgemeine IHK-Regeln', rule, 'mittel');
+  }
+
+  if (profile.layout) {
+    addResult(
+      results,
+      'IHK-Profilregeln',
+      `Layout/Form nach ${profile.label}`,
+      'grau',
+      'manuell gegenpruefen',
+      profile.layout,
+      'Schriftart, Zeilenabstand und Seitenraender koennen aus PDF/Text nur eingeschraenkt und aus DOCX nicht vollstaendig belastbar automatisch bewertet werden.',
+      'Finale Datei anhand dieser regionalen Layoutregel manuell pruefen.',
+      'mittel',
+      0.6
+    );
+  }
+
+  evaluateIhkPageRule(results, doc, profile);
+  evaluateIhkFileSizeRule(results, doc, profile);
+
+  for (const rule of profile.requirements || []) {
+    evaluatePatternRule(results, text, 'IHK-Profilregeln', rule, 'hoch');
+  }
+}
+
+const AI_TERM_PATTERNS = [
+  /\bchatgpt\b/i,
+  /\bopenai\b/i,
+  /\bcopilot\b/i,
+  /\bgemini\b/i,
+  /\bclaude\b/i,
+  /\bperplexity\b/i,
+  /\bdeepseek\b/i,
+  /\b(?:ki|kuenstliche intelligenz|künstliche intelligenz|generative ki|llm)\b/i,
+  /\bprompt(?:s)?\b/i
+];
+
+const AI_DISCLOSURE_PATTERNS = [
+  /ki[-\s]?nachweis/i,
+  /ki[-\s]?nutzung/i,
+  /tool\s*\/\s*url/i,
+  /prompt\s*\/\s*eingabe/i,
+  /antwort\s*\/\s*ergebnis/i,
+  /verwendete stelle/i,
+  /rechtschreib|grammatik|orthografie/i,
+  /quellenverzeichnis/i
+];
+
+const AI_SUSPICIOUS_PATTERNS = [
+  /als ki[-\s]?sprachmodell/i,
+  /ich kann (?:leider )?nicht/i,
+  /hier ist (?:eine|der|das) (?:moegliche|mögliche|ueberarbeitete|überarbeitete)/i,
+  /von chatgpt generiert/i,
+  /ki[-\s]?generiert/i
+];
+
+function analyzeAiUsage(text) {
+  const aiEvidence = evidenceList(text, AI_TERM_PATTERNS, 'KI-Hinweise', 5);
+  const suspiciousEvidence = evidenceList(text, AI_SUSPICIOUS_PATTERNS, 'Auffaellige KI-Formulierungen', 3);
+  const disclosureEvidence = evidenceList(text, AI_DISCLOSURE_PATTERNS, 'KI-/Quellen-Nachweis', 5);
+  const hasAiHints = aiEvidence !== '-';
+  const hasSuspiciousPhrases = suspiciousEvidence !== '-';
+  const hasDisclosure = disclosureEvidence !== '-';
+  const hasPromptDocs = /prompt|eingabe|antwort|screenshot|ki[-\s]?nachweis/i.test(text);
+  const hasToolReference = /chatgpt|openai|copilot|gemini|claude|perplexity|deepseek|https?:\/\/[^\s]*(?:openai|chatgpt|copilot|gemini|claude|perplexity)/i.test(text);
+  const deniesAiUse = /(?:keine|kein|nicht)\s+(?:ki|kuenstliche intelligenz|künstliche intelligenz|chatgpt)\s+(?:verwendet|genutzt|eingesetzt)/i.test(text)
+    || /(?:ki|kuenstliche intelligenz|künstliche intelligenz|chatgpt)\s+(?:wurde|wird)\s+(?:nicht|keine)\s+(?:verwendet|genutzt|eingesetzt)/i.test(text);
+
+  return {
+    hasAiHints,
+    hasSuspiciousPhrases,
+    hasDisclosure,
+    hasPromptDocs,
+    hasToolReference,
+    deniesAiUse,
+    aiEvidence,
+    suspiciousEvidence,
+    disclosureEvidence
+  };
+}
+
+function evaluateAiGuidelines({ results, text, profile }) {
+  const usage = analyzeAiUsage(text);
+  const policy = profile.aiPolicy || getIhkRuleProfile('allgemein').aiPolicy;
+
+  addResult(
+    results,
+    'KI-Richtlinien',
+    `KI-Richtlinie nach ${profile.label}`,
+    'grau',
+    policy.label,
+    policy.rule,
+    'Die hinterlegte KI-Regel wird fuer die folgende KI-Pruefung angewandt.',
+    'Regionale KI-Hinweise vor Abgabe mit der aktuellen IHK-Fassung abgleichen.',
+    'mittel',
+    0.7
+  );
+
+  if (usage.hasAiHints || usage.hasSuspiciousPhrases || usage.deniesAiUse) {
+    addResult(
+      results,
+      'KI-Richtlinien',
+      'Moegliche KI-Nutzung / Fundstellen',
+      usage.hasSuspiciousPhrases ? 'gelb' : usage.deniesAiUse && !usage.hasAiHints ? 'gruen' : 'gelb',
+      usage.deniesAiUse && !usage.hasAiHints ? 'KI-Nichtnutzung erklaert' : 'Hinweise im Dokument erkannt',
+      [usage.aiEvidence, usage.suspiciousEvidence].filter((value) => value !== '-').join(' | ') || usage.disclosureEvidence,
+      'Das Tool kann KI-Nutzung nicht beweisen, markiert aber sichtbare KI-Begriffe, Nachweise oder typische KI-Formulierungen als Pruefstellen.',
+      'Markierte Stellen im Dokument pruefen und Nutzung transparent im KI-Nachweis/Quellenverzeichnis dokumentieren.',
+      usage.hasSuspiciousPhrases ? 'hoch' : 'mittel'
+    );
+  } else {
+    addResult(
+      results,
+      'KI-Richtlinien',
+      'Moegliche KI-Nutzung / Fundstellen',
+      'grau',
+      'keine offensichtlichen Hinweise',
+      '-',
+      'Im Text wurden keine eindeutigen KI-Begriffe oder typischen KI-Restformulierungen erkannt. Eine Nutzung laesst sich automatisch nicht sicher ausschliessen.',
+      'Bei tatsaechlicher KI-Nutzung Nachweis, Tool/URL, Prompt, Antwort und verwendete Stellen ergaenzen.',
+      'mittel',
+      0.7
+    );
+  }
+
+  const needsFullDocumentation = ['documentation_required', 'standard'].includes(policy.level);
+  const restrictive = ['koeln_restrictive', 'stuttgart_restrictive'].includes(policy.level);
+  let status = 'grau';
+  let assessment = 'nicht sicher automatisch pruefbar';
+  let reason = 'Ohne klare KI-Hinweise ist nur eine Plausibilitaetspruefung moeglich.';
+  let recommendation = 'Eigenleistungserklaerung und Quellen-/KI-Nachweise final manuell pruefen.';
+  let severity = 'mittel';
+
+  if (restrictive && (usage.hasAiHints || usage.hasSuspiciousPhrases) && !usage.deniesAiUse) {
+    status = 'rot';
+    assessment = 'kritisch nach regionaler KI-Regel';
+    reason = policy.level === 'koeln_restrictive'
+      ? 'Das Koeln-Profil erlaubt keine generative KI; nur Recherche sowie Rechtschreib-/Grammatikpruefung sind zulässig.'
+      : 'Das Stuttgart-Profil erlaubt KI nicht zur Strukturierung oder Formulierung und nicht als Quelle.';
+    recommendation = 'KI-Fundstellen pruefen; generative Formulierungs-/Strukturhilfe entfernen oder mit der IHK klaeren. Erlaubte reine Korrektur-/Recherchehilfe sauber dokumentieren.';
+    severity = 'hoch';
+  } else if (usage.hasAiHints && needsFullDocumentation) {
+    const complete = usage.hasDisclosure && usage.hasPromptDocs && usage.hasToolReference;
+    status = complete ? 'gruen' : 'rot';
+    assessment = complete ? 'KI-Nachweis wirkt vollstaendig' : 'KI-Nachweis unvollstaendig';
+    reason = complete
+      ? 'KI-Tool, Nachweis-/Prompt-Bezug und Quellen-/Nachweisstellen sind erkennbar.'
+      : 'Es gibt KI-Hinweise, aber Tool/URL, Prompt/Antwort oder genaue Verwendungsstelle sind nicht vollstaendig erkennbar.';
+    recommendation = complete
+      ? 'KI-Nachweis gegen die regionale Vorgabe und Datenschutz pruefen.'
+      : 'KI-Nachweis mit Toolname, Anbieter/URL, Datum, Zweck, Prompt, Antwort/Ergebnis und verwendeter Stelle im Anhang ergaenzen.';
+    severity = complete ? 'niedrig' : 'hoch';
+  } else if (usage.hasAiHints && !usage.hasDisclosure) {
+    status = 'gelb';
+    assessment = 'KI-Hinweise ohne klaren Nachweis';
+    reason = 'KI-Begriffe wurden erkannt, aber ein sauberer KI-/Quellennachweis ist nicht eindeutig sichtbar.';
+    recommendation = 'KI-Nutzung und Fremdquellen transparent kennzeichnen oder Nichtnutzung klar erklaeren.';
+    severity = 'hoch';
+  } else if (usage.deniesAiUse) {
+    status = 'gruen';
+    assessment = 'Nichtnutzung erklaert';
+    reason = 'Es wurde eine KI-Nichtnutzungserklaerung erkannt.';
+    recommendation = 'Sicherstellen, dass Quellen und Fremdinhalte trotzdem vollstaendig gekennzeichnet sind.';
+    severity = 'niedrig';
+  }
+
+  addResult(
+    results,
+    'KI-Richtlinien',
+    'KI-Nachweis gegen IHK-Richtlinie',
+    status,
+    assessment,
+    usage.disclosureEvidence,
+    reason,
+    recommendation,
+    severity
+  );
+
+  return { ...usage, policy };
 }
 
 function evaluateDirectory({ results, text, title, existsPatterns, itemRegex, needsItems, category, criterion, notNeededLabel }) {
@@ -1103,13 +1462,21 @@ function localAnalyze(doc, AntragDoc, options = {}) {
   const results = [];
   const text = doc.text || '';
   const lText = lower(text);
+  const ihkProfile = getIhkRuleProfile(options.ihkProfile || 'allgemein');
   const meta = {
     fileName: doc.fileName,
     format: doc.format,
+    fileSizeBytes: doc.fileSizeBytes,
     pageCount: doc.pageCount,
     headings: extractHeadings(doc.bodyText || doc.text),
     docxStructure: doc.structure,
-    warnings: doc.warnings || []
+    warnings: doc.warnings || [],
+    ihkProfile: {
+      key: ihkProfile.key,
+      label: ihkProfile.label,
+      summary: ihkProfile.summary,
+      aiPolicy: ihkProfile.aiPolicy
+    }
   };
 
   const projectTitle = options.projectTitle || '';
@@ -1244,6 +1611,9 @@ function localAnalyze(doc, AntragDoc, options = {}) {
     addResult(results, 'Formale Prüfung', 'Kopfzeile mit Projekttitel und Firmenlogo', 'grau', 'bei PDF/Text nur eingeschränkt prüfbar', 'DOCX-Struktur nicht verfügbar.', 'Logo und echte Kopfzeilenstruktur können aus PDF/TXT nicht zuverlässig automatisch geprüft werden.', 'Für sichere Prüfung die DOCX-Datei hochladen.', 'mittel');
     addResult(results, 'Formale Prüfung', 'Fußzeile mit Seitenzahl und Name des Dokumentationserstellers', 'grau', 'bei PDF/Text nur eingeschränkt prüfbar', 'DOCX-Struktur nicht verfügbar.', 'Seitenzahlen und Fußzeilenstruktur können aus PDF/TXT nur heuristisch erkannt werden.', 'Für sichere Prüfung die DOCX-Datei hochladen.', 'mittel');
   }
+
+  evaluateIhkRules({ results, doc, text, profile: ihkProfile });
+  meta.aiUsage = evaluateAiGuidelines({ results, text, profile: ihkProfile });
 
   const phaseDefinitions = [
     { name: 'Analysephase', patterns: [/analysephase/i, /ist-analyse/i, /anforderungsanalyse/i, /lastenheft/i] },
@@ -1422,6 +1792,12 @@ Zusaetzliche UML-Pruefanweisung:
 Regelbasierte UML-Auswertung:
 ${JSON.stringify(baseReport.metadata?.umlAnalysis || {}, null, 2)}
 
+Ausgewaehltes IHK-Regelprofil:
+${JSON.stringify(baseReport.metadata?.ihkProfile || {}, null, 2)}
+
+Regelbasierte KI-Richtlinien-Auswertung:
+${JSON.stringify(baseReport.metadata?.aiUsage || {}, null, 2)}
+
 ${imageContextBlock}`.trim();
 
   const inputContent = [{ type: 'input_text', text: enrichedPrompt }];
@@ -1571,6 +1947,10 @@ app.get('/api/health', (_req, res) => {
     storage: dataStore.kind,
     profilePhotoLimitMb
   });
+});
+
+app.get('/api/ihk-profiles', requireAuth, (_req, res) => {
+  res.json({ profiles: ihkProfilesForClient() });
 });
 
 app.get('/api/auth/me', async (req, res) => {
@@ -1749,7 +2129,7 @@ app.post('/api/analyze', requireAuth, upload.fields([
       projectTitle: req.body.projectTitle || '',
       author: req.body.author || '',
       company: req.body.company || '',
-      ihkProfile: req.body.ihkProfile || 'allgemein',
+      ihkProfile: getIhkRuleProfile(req.body.ihkProfile || 'allgemein').key,
       useAi: req.body.useAi === 'true'
     };
 
