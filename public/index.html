@@ -102,14 +102,57 @@
       <header class="workspace-header">
         <div>
           <div class="auth-logo">QT</div>
-          <h1>QuizTool</h1>
-          <p>In Vorbereitung</p>
+          <h1>IHK QuizTool</h1>
+          <p id="quizStatus">IHK_APP wird geladen ...</p>
         </div>
       </header>
-      <div class="coming-soon">
-        <strong>QuizTool kommt als naechstes.</strong>
+
+      <div class="quiz-toolbar">
         <button id="backToWorkspaceButton" class="secondary" type="button">Zurueck</button>
+        <button id="openDokuFromQuizButton" type="button">DokuTool oeffnen</button>
       </div>
+
+      <section class="quiz-grid">
+        <article class="quiz-card quiz-card-wide">
+          <span class="eyebrow">Aus IHK_APP uebernommen</span>
+          <h2>Quiz-Dashboard</h2>
+          <p>Die Expo-App-Struktur ist als Web-Bereich vorbereitet: Profil, Fachrichtung, Rollenmodell und Firestore-Fragenpool.</p>
+          <div class="quiz-status-row">
+            <span>Firestore-Pfad</span>
+            <strong id="quizFirestorePath">-</strong>
+          </div>
+        </article>
+
+        <article class="quiz-card">
+          <h2>Quiz-Profil</h2>
+          <label>
+            Vorname
+            <input id="quizFirstNameInput" autocomplete="given-name" />
+          </label>
+          <label>
+            Nachname
+            <input id="quizLastNameInput" autocomplete="family-name" />
+          </label>
+          <label>
+            Fachrichtung
+            <select id="quizFachSelect"></select>
+          </label>
+          <p id="quizFachInfo" class="status-line"></p>
+          <button id="saveQuizProfileButton" type="button">Quiz-Profil speichern</button>
+          <p id="quizProfileStatus" class="status-line"></p>
+        </article>
+
+        <article class="quiz-card">
+          <h2>Rollen & Rechte</h2>
+          <div id="quizRolesList" class="role-list"></div>
+        </article>
+
+        <article class="quiz-card quiz-card-wide">
+          <h2>Fragenpool-Struktur</h2>
+          <p>Die spaetere Firestore-Abfrage entspricht dem importierten IHK_APP-Service: Fragen werden pro Pool und Topic sortiert geladen.</p>
+          <div id="quizQuestionFields" class="schema-list"></div>
+        </article>
+      </section>
     </div>
   </section>
 

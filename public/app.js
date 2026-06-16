@@ -7,6 +7,17 @@ const openDokuToolButton = document.querySelector('#openDokuToolButton');
 const openQuizToolButton = document.querySelector('#openQuizToolButton');
 const backToWorkspaceButton = document.querySelector('#backToWorkspaceButton');
 const backToWorkspaceFromDokuButton = document.querySelector('#backToWorkspaceFromDokuButton');
+const openDokuFromQuizButton = document.querySelector('#openDokuFromQuizButton');
+const quizStatus = document.querySelector('#quizStatus');
+const quizFirestorePath = document.querySelector('#quizFirestorePath');
+const quizFirstNameInput = document.querySelector('#quizFirstNameInput');
+const quizLastNameInput = document.querySelector('#quizLastNameInput');
+const quizFachSelect = document.querySelector('#quizFachSelect');
+const quizFachInfo = document.querySelector('#quizFachInfo');
+const saveQuizProfileButton = document.querySelector('#saveQuizProfileButton');
+const quizProfileStatus = document.querySelector('#quizProfileStatus');
+const quizRolesList = document.querySelector('#quizRolesList');
+const quizQuestionFields = document.querySelector('#quizQuestionFields');
 const authForm = document.querySelector('#authForm');
 const authTitle = document.querySelector('#authTitle');
 const authSubtitle = document.querySelector('#authSubtitle');
@@ -64,6 +75,7 @@ let currentUser = null;
 let authMode = 'login';
 let currentReport = null;
 let history = [];
+let quizConfig = null;
 
 function statusLabel(status) {
   return {
@@ -180,6 +192,7 @@ function showQuizTool() {
   quizView.classList.remove('hidden');
   profileWidget.classList.remove('hidden');
   profileDropdown.classList.add('hidden');
+  loadQuizTool();
 }
 
 function setAuthMode(nextMode) {
@@ -294,6 +307,10 @@ openQuizToolButton.addEventListener('click', () => {
   showQuizTool();
 });
 
+openDokuFromQuizButton.addEventListener('click', () => {
+  showDokuTool();
+});
+
 backToWorkspaceButton.addEventListener('click', () => {
   showWorkspace();
 });
@@ -301,6 +318,105 @@ backToWorkspaceButton.addEventListener('click', () => {
 backToWorkspaceFromDokuButton.addEventListener('click', () => {
   showWorkspace();
 });
+
+quizFachSelect.addEventListener('change', () => {
+  renderFachInfo();
+});
+
+saveQuizProfileButton.addEventListener('click', async () => {
+  quizProfileStatus.textContent = 'Quiz-Profil wird gespeichert ...';
+  saveQuizProfileButton.disabled = true;
+  try {
+    const data = await apiFetch('/api/quiz/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstName: quizFirstNameInput.value,
+        lastName: quizLastNameInput.value,
+        fach: quizFachSelect.value
+      })
+    });
+    renderUser(data.user);
+    renderQuizProfile(data.profile);
+    quizProfileStatus.textContent = 'Quiz-Profil gespeichert.';
+  } catch (error) {
+    quizProfileStatus.textContent = error.message;
+  } finally {
+    saveQuizProfileButton.disabled = false;
+  }
+});
+
+async function loadQuizTool() {
+  quizStatus.textContent = 'IHK_APP wird geladen ...';
+  try {
+    const data = await apiFetch('/api/quiz/config');
+    quizConfig = data;
+    renderQuizTool(data);
+    quizStatus.textContent = `Integriert aus ${data.sourceRepo}.`;
+  } catch (error) {
+    quizStatus.textContent = error.message;
+  }
+}
+
+function renderQuizTool(data) {
+  renderFachOptions(data.fachrichtungen || {});
+  renderQuizProfile(data.profile || {});
+  renderRoles(data.roleTemplates || []);
+  renderQuestionSchema(data.questionSchema || {});
+}
+
+function renderFachOptions(fachrichtungen) {
+  quizFachSelect.innerHTML = '<option value="">Bitte waehlen</option>';
+  for (const [key, value] of Object.entries(fachrichtungen)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = value.label;
+    quizFachSelect.appendChild(option);
+  }
+}
+
+function renderQuizProfile(profile) {
+  quizFirstNameInput.value = profile.firstName || '';
+  quizLastNameInput.value = profile.lastName || '';
+  quizFachSelect.value = profile.fach || '';
+  renderFachInfo();
+}
+
+function renderFachInfo() {
+  const selected = quizConfig?.fachrichtungen?.[quizFachSelect.value];
+  quizFachInfo.textContent = selected?.info || 'Die Fachrichtung wird spaeter fuer passende Fragenpools genutzt.';
+}
+
+function renderRoles(roles) {
+  quizRolesList.innerHTML = '';
+  for (const role of roles) {
+    const enabled = Object.entries(role.permissions || {})
+      .filter(([, value]) => value)
+      .map(([key]) => key.replace(/^can/, ''))
+      .join(', ');
+    const article = document.createElement('article');
+    article.className = 'role-card';
+    article.innerHTML = `
+      <div>
+        <strong>${escapeHtml(role.name)}</strong>
+        <small>${escapeHtml(role.key)}${role.builtIn ? ' · Systemrolle' : ''}</small>
+      </div>
+      <p>${escapeHtml(role.description || '')}</p>
+      <span>${escapeHtml(enabled || 'Keine Rechte aktiv')}</span>
+    `;
+    quizRolesList.appendChild(article);
+  }
+}
+
+function renderQuestionSchema(schema) {
+  quizFirestorePath.textContent = schema.firestorePath || '-';
+  quizQuestionFields.innerHTML = '';
+  for (const field of schema.fields || []) {
+    const item = document.createElement('span');
+    item.textContent = field;
+    quizQuestionFields.appendChild(item);
+  }
+}
 
 function setAnalyzeLoading(isLoading) {
   analyzeButton.disabled = isLoading;

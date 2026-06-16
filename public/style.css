@@ -218,6 +218,109 @@ body {
   box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
 }
 
+.quiz-toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quiz-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.quiz-card {
+  display: grid;
+  gap: 13px;
+  align-content: start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, .06);
+}
+
+.quiz-card-wide {
+  grid-column: 1 / -1;
+}
+
+.quiz-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.quiz-card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.quiz-status-row {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.quiz-status-row span,
+.quiz-status-row strong {
+  word-break: break-word;
+}
+
+.role-list {
+  display: grid;
+  gap: 10px;
+}
+
+.role-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.role-card small {
+  display: block;
+  margin-top: 3px;
+}
+
+.role-card p {
+  margin: 0;
+}
+
+.role-card span {
+  color: var(--muted);
+  font-size: .88rem;
+}
+
+.schema-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.schema-list span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  color: var(--text);
+  font-weight: 700;
+  font-size: .86rem;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -563,4 +666,5 @@ th {
   .quiz-view { padding: 20px; }
   .workspace-header { padding-right: 72px; }
   .tool-grid { grid-template-columns: 1fr; }
+  .quiz-grid { grid-template-columns: 1fr; }
 }

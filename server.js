@@ -20,6 +20,57 @@ const dataStore = await createDataStore();
 const sessionSecret = process.env.AUTH_SESSION_SECRET || randomBytes(48).toString('hex');
 const sessionCookieName = 'ihk_dokutool_session';
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
+const quizSourceRepo = 'FlorianSchaffer2908/IHK_APP';
+const quizFachrichtungen = {
+  FIAE: {
+    label: 'Fachinformatiker/in Anwendungsentwicklung',
+    info: 'Softwareentwicklung, Testing, DevOps.'
+  },
+  FISI: {
+    label: 'Fachinformatiker/in Systemintegration',
+    info: 'Netzwerke, Server, Betrieb und Support.'
+  },
+  KaBue: {
+    label: 'Kaufmann/-frau fuer Bueromanagement',
+    info: 'Organisation, Verwaltung, Kommunikation.'
+  },
+  Kits: {
+    label: 'Kaufleute fuer IT-Systemmanagement',
+    info: 'IT-Vertrieb, Beratung, Prozesse.'
+  }
+};
+const quizRoleTemplates = [
+  {
+    key: 'user',
+    name: 'Lernender',
+    description: 'Kann Fragen lesen und Quizdurchlaeufe bearbeiten.',
+    builtIn: true,
+    permissions: {
+      canReadQuestions: true,
+      canWriteQuestions: false,
+      canDeleteQuestions: false,
+      canManageRoles: false,
+      canManageUsers: false
+    }
+  },
+  {
+    key: 'admin',
+    name: 'Admin',
+    description: 'Kann Fragen, Rollen und Benutzer spaeter verwalten.',
+    builtIn: true,
+    permissions: {
+      canReadQuestions: true,
+      canWriteQuestions: true,
+      canDeleteQuestions: true,
+      canManageRoles: true,
+      canManageUsers: true
+    }
+  }
+];
+const quizQuestionSchema = {
+  firestorePath: 'fragenpools/{poolId}/questions/{questionId}',
+  fields: ['topic', 'question', 'type', 'options', 'solution', 'explanation', 'questionIndex']
+};
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -131,6 +182,24 @@ function verifyPassword(password, user) {
   const expected = Buffer.from(user.passwordHash, 'base64url');
   const actual = pbkdf2Sync(password, user.passwordSalt, user.passwordIterations, expected.length, 'sha256');
   return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function splitDisplayName(displayName = '') {
+  const parts = String(displayName || '').trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ')
+  };
+}
+
+function quizProfileForUser(user) {
+  const fallback = splitDisplayName(user?.displayName);
+  return {
+    firstName: user?.quizProfile?.firstName ?? user?.firstName ?? fallback.firstName,
+    lastName: user?.quizProfile?.lastName ?? user?.lastName ?? fallback.lastName,
+    fach: user?.quizProfile?.fach ?? user?.fach ?? '',
+    role: user?.role || 'user'
+  };
 }
 
 async function getSessionUser(req) {
@@ -1068,6 +1137,7 @@ app.post('/api/auth/register', async (req, res) => {
     const user = await dataStore.createUser({
       email,
       displayName: displayName || email.split('@')[0],
+      role: 'user',
       photo: null,
       ...hashPassword(password)
     });
@@ -1125,6 +1195,49 @@ app.post('/api/profile/photo', requireAuth, profileUpload.single('photo'), async
   };
   const user = await dataStore.updateUserProfile(req.user.id, { photo });
   res.json({ user: toPublicUser(user) });
+});
+
+app.get('/api/quiz/config', requireAuth, async (req, res) => {
+  res.json({
+    sourceRepo: quizSourceRepo,
+    fachrichtungen: quizFachrichtungen,
+    roleTemplates: quizRoleTemplates,
+    questionSchema: quizQuestionSchema,
+    profile: quizProfileForUser(req.user)
+  });
+});
+
+app.patch('/api/quiz/profile', requireAuth, async (req, res) => {
+  const firstName = String(req.body?.firstName || '').trim();
+  const lastName = String(req.body?.lastName || '').trim();
+  const fach = String(req.body?.fach || '').trim();
+
+  if (fach && !quizFachrichtungen[fach]) {
+    return res.status(400).json({ error: 'Bitte eine gueltige Fachrichtung waehlen.' });
+  }
+
+  const quizProfile = {
+    firstName,
+    lastName,
+    fach: fach || null,
+    updatedAt: new Date().toISOString()
+  };
+
+  const patch = {
+    firstName: firstName || null,
+    lastName: lastName || null,
+    fach: fach || null,
+    quizProfile
+  };
+
+  const displayName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  if (displayName) patch.displayName = displayName;
+
+  const user = await dataStore.updateUserProfile(req.user.id, patch);
+  res.json({
+    user: toPublicUser(user),
+    profile: quizProfileForUser(user)
+  });
 });
 
 app.get('/api/reports', requireAuth, async (req, res) => {
