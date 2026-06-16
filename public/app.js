@@ -369,7 +369,7 @@ function renderQuizTool(data) {
 }
 
 function renderFachOptions(fachrichtungen) {
-  quizFachSelect.innerHTML = '<option value="">Bitte waehlen</option>';
+  quizFachSelect.innerHTML = '<option value="">Bitte wählen</option>';
   for (const [key, value] of Object.entries(fachrichtungen)) {
     const option = document.createElement('option');
     option.value = key;
@@ -387,7 +387,7 @@ function renderQuizProfile(profile) {
 
 function renderFachInfo() {
   const selected = quizConfig?.fachrichtungen?.[quizFachSelect.value];
-  quizFachInfo.textContent = selected?.info || 'Die Fachrichtung wird spaeter fuer passende Fragenpools genutzt.';
+  quizFachInfo.textContent = selected?.info || 'Die Fachrichtung wird später für passende Fragenpools genutzt.';
 }
 
 function renderRoles(roles) {

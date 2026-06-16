@@ -4,13 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IHK DokuTool</title>
+  <link rel="icon" href="assets/dokutool-logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <section id="authView" class="auth-view">
     <form id="authForm" class="auth-card">
-      <div>
-        <div class="auth-logo">DT</div>
+      <div class="auth-identity">
+        <img class="company-logo" src="assets/ploglan-logo.png" alt="Ploglan" />
+        <img class="auth-product-logo" src="assets/dokutool-logo.svg" alt="IHK DokuTool" />
         <h1 id="authTitle">Einloggen</h1>
         <p id="authSubtitle">Melde dich an, um das IHK DokuTool zu nutzen.</p>
       </div>
@@ -70,27 +72,32 @@
   <section id="workspaceView" class="workspace-view hidden">
     <div class="workspace-shell">
       <header class="workspace-header">
-        <div>
-          <div class="auth-logo">DT</div>
+        <div class="workspace-title">
+          <img class="workspace-company-logo" src="assets/ploglan-logo.png" alt="Ploglan" />
           <h1>Arbeitsbereich</h1>
           <p id="workspaceGreeting">Willkommen</p>
         </div>
+        <img class="workspace-product-mark" src="assets/dokutool-logo.svg" alt="" />
       </header>
 
       <div class="tool-grid" aria-label="Tool-Auswahl">
         <button id="openDokuToolButton" class="tool-tile" type="button">
-          <span class="tool-mark">DT</span>
-          <span>
+          <span class="tool-visual">
+            <img src="assets/dokutool-logo.svg" alt="" />
+          </span>
+          <span class="tool-copy">
             <strong>DokuTool</strong>
-            <small>Aktiv</small>
+            <small>Dokumentation</small>
           </span>
         </button>
 
         <button id="openQuizToolButton" class="tool-tile" type="button">
-          <span class="tool-mark muted">QT</span>
-          <span>
+          <span class="tool-visual">
+            <img src="assets/quiz-logo.png" alt="" />
+          </span>
+          <span class="tool-copy">
             <strong>QuizTool</strong>
-            <small>In Vorbereitung</small>
+            <small>IHK Training</small>
           </span>
         </button>
       </div>
@@ -99,22 +106,23 @@
 
   <section id="quizView" class="quiz-view hidden">
     <div class="workspace-shell">
-      <header class="workspace-header">
+      <header class="workspace-header quiz-hero">
+        <img class="quiz-hero-pattern" src="assets/quiz-pattern.png" alt="" />
         <div>
-          <div class="auth-logo">QT</div>
+          <img class="header-product-logo quiz-product-logo" src="assets/quiz-logo-tight.png" alt="IHK QuizTool" />
           <h1>IHK QuizTool</h1>
           <p id="quizStatus">IHK_APP wird geladen ...</p>
         </div>
       </header>
 
       <div class="quiz-toolbar">
-        <button id="backToWorkspaceButton" class="secondary" type="button">Zurueck</button>
-        <button id="openDokuFromQuizButton" type="button">DokuTool oeffnen</button>
+        <button id="backToWorkspaceButton" class="secondary" type="button">Zurück</button>
+        <button id="openDokuFromQuizButton" type="button">DokuTool öffnen</button>
       </div>
 
       <section class="quiz-grid">
         <article class="quiz-card quiz-card-wide">
-          <span class="eyebrow">Aus IHK_APP uebernommen</span>
+          <span class="eyebrow">Aus IHK_APP übernommen</span>
           <h2>Quiz-Dashboard</h2>
           <p>Die Expo-App-Struktur ist als Web-Bereich vorbereitet: Profil, Fachrichtung, Rollenmodell und Firestore-Fragenpool.</p>
           <div class="quiz-status-row">
@@ -149,7 +157,7 @@
 
         <article class="quiz-card quiz-card-wide">
           <h2>Fragenpool-Struktur</h2>
-          <p>Die spaetere Firestore-Abfrage entspricht dem importierten IHK_APP-Service: Fragen werden pro Pool und Topic sortiert geladen.</p>
+          <p>Die spätere Firestore-Abfrage entspricht dem importierten IHK_APP-Service: Fragen werden pro Pool und Topic sortiert geladen.</p>
           <div id="quizQuestionFields" class="schema-list"></div>
         </article>
       </section>
@@ -159,7 +167,7 @@
   <main id="appShell" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo">DT</div>
+        <img class="brand-logo" src="assets/dokutool-logo.svg" alt="IHK DokuTool" />
         <div>
           <h1>IHK DokuTool</h1>
           <p>Projektantrag ↔ Dokumentation prüfen</p>
@@ -185,9 +193,12 @@
 
     <section id="checkerPanel" class="panel visible">
       <header class="panel-header">
-        <div>
-          <h2>Doku-Prüfung</h2>
-          <p id="analyzeStatus">Bereit</p>
+        <div class="panel-title">
+          <img class="panel-logo" src="assets/dokutool-logo.svg" alt="" />
+          <div>
+            <h2>Doku-Prüfung</h2>
+            <p id="analyzeStatus">Bereit</p>
+          </div>
         </div>
       </header>
 
@@ -236,7 +247,7 @@
               <option value="darmstadt">IHK Darmstadt</option>
               <option value="schwaben">IHK Schwaben</option>
               <option value="muenchen">IHK Muenchen und Oberbayern</option>
-              <option value="nuernberg">IHK Nuernberg fuer Mittelfranken</option>
+              <option value="nuernberg">IHK Nürnberg für Mittelfranken</option>
               <option value="niederbayern">IHK Niederbayern</option>
               <option value="wuerzburg">IHK Wuerzburg-Schweinfurt</option>
               <option value="bonn">IHK Bonn/Rhein-Sieg</option>
@@ -307,9 +318,12 @@
 
     <section id="chatPanel" class="panel chat-panel">
       <header class="panel-header">
-        <div>
-          <h2>KI-Chat</h2>
-          <p id="status">Bereit</p>
+        <div class="panel-title">
+          <img class="panel-logo" src="assets/dokutool-logo.svg" alt="" />
+          <div>
+            <h2>KI-Chat</h2>
+            <p id="status">Bereit</p>
+          </div>
         </div>
       </header>
 

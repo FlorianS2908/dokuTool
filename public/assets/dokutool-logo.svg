@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 220" role="img" aria-labelledby="title desc">
+  <title id="title">IHK DokuTool</title>
+  <desc id="desc">Logo mit Dokument, Prüfhaken und IHK DokuTool Schriftzug</desc>
+  <defs>
+    <linearGradient id="paper" x1="78" y1="34" x2="212" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8ffff"/>
+      <stop offset="1" stop-color="#d9f7f8"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="64" y1="180" x2="234" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#087f8c"/>
+      <stop offset=".56" stop-color="#13b8c6"/>
+      <stop offset="1" stop-color="#60e6d3"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="246" y1="57" x2="640" y2="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#102126"/>
+      <stop offset="1" stop-color="#31565d"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="22" width="190" height="176" rx="32" fill="#09282f"/>
+  <path d="M83 50h76l32 34v86H83z" fill="url(#paper)"/>
+  <path d="M158 50v35h33" fill="none" stroke="#93dce2" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M101 108h57M101 134h76M101 160h43" stroke="#6baab2" stroke-width="10" stroke-linecap="round"/>
+  <path d="M73 145l35 34 82-91" fill="none" stroke="url(#accent)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="248" y="120" font-family="Inter, Aptos, Arial, sans-serif" font-size="66" font-weight="800" fill="url(#ink)" letter-spacing="0">DokuTool</text>
+  <text x="252" y="162" font-family="Inter, Aptos, Arial, sans-serif" font-size="25" font-weight="800" fill="#087f8c" letter-spacing="0">IHK PROJEKTPRÜFUNG</text>
+</svg>

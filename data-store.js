@@ -12,6 +12,10 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function stripJsonBom(raw) {
+  return String(raw || '').replace(/^\uFEFF/, '');
+}
+
 function withoutPassword(user) {
   if (!user) return null;
   const {
@@ -56,7 +60,7 @@ class LocalJsonStore {
   async read() {
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
-      const data = JSON.parse(raw);
+      const data = JSON.parse(stripJsonBom(raw));
       return {
         users: Array.isArray(data.users) ? data.users : [],
         reports: Array.isArray(data.reports) ? data.reports : []
@@ -241,7 +245,7 @@ async function createFirestoreStore() {
 
   if (serviceAccountBase64) {
     const json = Buffer.from(serviceAccountBase64, 'base64').toString('utf8');
-    appOptions.credential = appModule.cert(JSON.parse(json));
+    appOptions.credential = appModule.cert(JSON.parse(stripJsonBom(json)));
   } else {
     appOptions.credential = appModule.applicationDefault();
   }
