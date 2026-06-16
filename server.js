@@ -279,7 +279,7 @@ const CHECKLIST_REFERENCE = {
     'Kopfzeile mit Projekttitel und Firmenlogo',
     'Fußzeile mit Seitenzahl und Name des Dokumentationserstellers',
     'Deckblatt mit Name, Firma, Projekttitel, Ausbilder und Projektbetreuer',
-    'Mindestens ein UML-Diagramm in Analyse, Planung, Entwurf und Implementierung',
+    'Mindestens ein als Abbildung vorhandenes UML-Diagramm in Analyse, Planung, Entwurf und Implementierung',
     'Testphase/Qualitätssicherung vorhanden und passend zur Dokumentation',
     'Soll-/Ist-Vergleich vorhanden und passend zur Dokumentation',
     'Fazit vorhanden'
@@ -316,6 +316,107 @@ function stripXmlText(xml = '') {
   return normalize(textParts.join(' '));
 }
 
+function extractDocxParagraphs(xml = '') {
+  const paragraphs = [];
+  const paragraphRegex = /<w:p\b[\s\S]*?<\/w:p>/g;
+  const blipRegex = /<a:blip\b[^>]*(?:r:embed|embed)="([^"]+)"/g;
+  let match;
+  while ((match = paragraphRegex.exec(xml)) !== null) {
+    const paragraphXml = match[0];
+    const imageRelIds = [];
+    let imageMatch;
+    while ((imageMatch = blipRegex.exec(paragraphXml)) !== null) {
+      imageRelIds.push(imageMatch[1]);
+    }
+    paragraphs.push({
+      text: stripXmlText(paragraphXml),
+      hasImage: imageRelIds.length > 0,
+      imageRelIds,
+      xml: paragraphXml
+    });
+  }
+  return paragraphs;
+}
+
+function zipPathJoin(baseDir, target = '') {
+  const raw = target.replace(/\\/g, '/').replace(/^\/+/, '');
+  const parts = `${baseDir}/${raw}`.split('/');
+  const stack = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') stack.pop();
+    else stack.push(part);
+  }
+  return stack.join('/');
+}
+
+function contentTypeFromPath(fileName = '') {
+  const ext = fileName.toLowerCase().split('.').pop();
+  const map = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif'
+  };
+  return map[ext] || null;
+}
+
+function parseRelationships(xml = '') {
+  const relationships = new Map();
+  const relRegex = /<Relationship\b[^>]*>/g;
+  let match;
+  while ((match = relRegex.exec(xml)) !== null) {
+    const tag = match[0];
+    const id = /Id="([^"]+)"/.exec(tag)?.[1];
+    const target = /Target="([^"]+)"/.exec(tag)?.[1];
+    if (id && target) relationships.set(id, target);
+  }
+  return relationships;
+}
+
+async function extractDocxBodyImages(zip, documentXml) {
+  const paragraphs = extractDocxParagraphs(documentXml);
+  const relsXml = (await readZipXml(zip, /^word\/_rels\/document\.xml\.rels$/))[0]?.xml || '';
+  const relationships = parseRelationships(relsXml);
+  const images = [];
+  const seen = new Set();
+
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const paragraph = paragraphs[index];
+    if (!paragraph.hasImage) continue;
+
+    const context = normalize(
+      paragraphs
+        .slice(Math.max(0, index - 2), Math.min(paragraphs.length, index + 4))
+        .map((p) => p.text)
+        .filter(Boolean)
+        .join(' ')
+    );
+
+    for (const relId of paragraph.imageRelIds) {
+      const target = relationships.get(relId);
+      if (!target || /^[a-z]+:/i.test(target)) continue;
+      const mediaPath = target.startsWith('word/') ? target : zipPathJoin('word', target);
+      const zipFile = zip.file(mediaPath);
+      const contentType = contentTypeFromPath(mediaPath);
+      const key = `${relId}:${mediaPath}:${index}`;
+      if (!zipFile || seen.has(key)) continue;
+      seen.add(key);
+      images.push({
+        relId,
+        fileName: mediaPath,
+        contentType,
+        base64: contentType ? await zipFile.async('base64') : null,
+        paragraphIndex: index,
+        nearbyText: context || '-'
+      });
+    }
+  }
+
+  return images;
+}
+
 async function readZipXml(zip, pattern) {
   const out = [];
   const names = Object.keys(zip.files).filter((name) => pattern.test(name));
@@ -338,6 +439,7 @@ async function extractDocx(file) {
   const footerText = stripXmlText(footerXml);
   const documentText = normalize(mammothResult.value || stripXmlText(documentXml));
   const fullText = normalize([headerText, documentText, footerText].filter(Boolean).join('\n'));
+  const bodyImages = await extractDocxBodyImages(zip, documentXml);
 
   const bodyImageCount = (documentXml.match(/<a:blip\b/g) || []).length;
   const headerImageCount = (headerXml.match(/<a:blip\b/g) || []).length;
@@ -359,8 +461,15 @@ async function extractDocx(file) {
       headerImageCount,
       footerImageCount,
       pageFieldInFooter,
-      docxStructureAvailable: true
+      docxStructureAvailable: true,
+      bodyImageContexts: bodyImages.slice(0, 20).map((image, index) => ({
+        index: index + 1,
+        fileName: image.fileName,
+        contentType: image.contentType,
+        nearbyText: image.nearbyText
+      }))
     },
+    images: bodyImages,
     warnings: []
   };
 }
@@ -647,6 +756,331 @@ function containsSemantic(text, item) {
   return false;
 }
 
+const UML_TEXT_PATTERN = /\b(?:uml|use[-\s]?case|anwendungsfall(?:diagramm)?|aktivit(?:\u00e4|ae)tsdiagramm|klassendiagramm|sequenzdiagramm|komponentendiagramm|deploymentdiagramm|verteilungsdiagramm|paketdiagramm|zustandsdiagramm|objektdiagramm|kommunikationsdiagramm)\b/i;
+const UML_FIGURE_PATTERN = /\b(?:abbildung|abb\.?|figure|fig\.?)\s*(?:\d+(?:[.-]\d+)*)?/i;
+const UML_RULEBOOK_NOTE = 'Regelbasis aus UML-25.epub: Diagrammtyp, zentrale Notationselemente, korrekte Beziehungen, Lesbarkeit und Bezug zur beschriebenen Loesung pruefen.';
+
+const UML_DIAGRAM_DEFINITIONS = [
+  {
+    key: 'class',
+    label: 'Klassendiagramm',
+    typePatterns: [/\bklassendiagramm\b/i, /\bclass diagram\b/i, /\bklasse(?:n)?\b.*\b(?:attribut|operation|methode|assoziation)\b/i],
+    notationChecks: [
+      { label: 'Klassen sind benannt', patterns: [/\bklasse(?:n)?\b|\bclass(?:es)?\b/i] },
+      { label: 'Attribute oder Operationen sind nachvollziehbar', patterns: [/\battribut(?:e)?\b|\boperation(?:en)?\b|\bmethode(?:n)?\b/i] },
+      { label: 'Beziehungen sind fachlich benannt', patterns: [/\bassoziation(?:en)?\b|\bbeziehung(?:en)?\b|\bvererbung\b|\bgeneralisierung\b|\bspezialisierung\b/i] },
+      { label: 'Multiplizitaeten/Kardinalitaeten sind erkennbar', patterns: [/\bmultiplizit(?:aet|\u00e4t|aeten|\u00e4ten)\b|\bkardinalit(?:aet|\u00e4t|aeten|\u00e4ten)\b|\b0\.\.1\b|\b1\.\.\*\b|\b0\.\.\*\b|\b1\s*:\s*n\b|\bn\s*:\s*m\b/i] },
+      { label: 'Aggregation/Komposition wird korrekt abgegrenzt', patterns: [/\baggregation\b|\bkomposition\b|\bdiamant\b/i] }
+    ],
+    fitPatterns: [/\bdatenmodell\b|\bdatenbank\b|\bdomain\b|\bobjektmodell\b|\bentity\b|\bentwurf\b|\barchitektur\b/i],
+    minNotation: 3
+  },
+  {
+    key: 'useCase',
+    label: 'Anwendungsfalldiagramm',
+    typePatterns: [/\banwendungsfall(?:diagramm)?\b/i, /\buse[-\s]?case(?: diagram)?\b/i],
+    notationChecks: [
+      { label: 'Akteure sind externe Rollen', patterns: [/\bakteur(?:e)?\b|\bactor(?:s)?\b|\brolle(?:n)?\b/i] },
+      { label: 'Use Cases sind als fachliche Ziele formuliert', patterns: [/\banwendungsfall\b|\buse[-\s]?case\b|\bfunktion(?:en)?\b|\bziel(?:e)?\b/i] },
+      { label: 'Systemgrenze ist nachvollziehbar', patterns: [/\bsystemgrenze\b|\bsystem boundary\b|\bsystemkontext\b/i] },
+      { label: 'include/extend wird bewusst eingesetzt', patterns: [/\binclude\b|\bextend\b|\berweitert\b|\bbeinhaltet\b/i] },
+      { label: 'Assoziationen verbinden Akteure und Use Cases', patterns: [/\bassoziation(?:en)?\b|\bverbindung(?:en)?\b|\bbeziehung(?:en)?\b/i] }
+    ],
+    fitPatterns: [/\banforderung(?:en)?\b|\blastenheft\b|\bsoll[-\s]?konzept\b|\bbenutzer\b|\brolle(?:n)?\b|\bfunktion(?:en)?\b/i],
+    minNotation: 3
+  },
+  {
+    key: 'activity',
+    label: 'Aktivitaetsdiagramm',
+    typePatterns: [/\baktivit(?:\u00e4|ae)tsdiagramm\b/i, /\bactivity diagram\b/i],
+    notationChecks: [
+      { label: 'Start- und Endknoten sind vorhanden', patterns: [/\bstartknoten\b|\bendknoten\b|\bstart\b.*\bende\b|\binitial node\b|\bfinal node\b/i] },
+      { label: 'Aktivitaeten/Aktionen sind als Schritte erkennbar', patterns: [/\baktivitaet(?:en)?\b|\baktivit\u00e4t(?:en)?\b|\baktion(?:en)?\b|\bschritt(?:e)?\b/i] },
+      { label: 'Kontrollfluesse verbinden die Aktionen', patterns: [/\bkontrollfluss\b|\bcontrol flow\b|\bablauf\b|\bprozessfluss\b/i] },
+      { label: 'Entscheidungen und Guards sind plausibel', patterns: [/\bentscheidung(?:en)?\b|\bverzweigung(?:en)?\b|\bguard(?:s)?\b|\bbedingung(?:en)?\b/i] },
+      { label: 'Swimlanes/Verantwortlichkeiten sind bei Bedarf sichtbar', patterns: [/\bswimlane(?:s)?\b|\bpartition(?:en)?\b|\bverantwortlichkeit(?:en)?\b/i] }
+    ],
+    fitPatterns: [/\bprozess\b|\bworkflow\b|\bablauf\b|\bgesch(?:\u00e4|ae)ftsprozess\b|\bimplementierung\b|\btestablauf\b/i],
+    minNotation: 3
+  },
+  {
+    key: 'sequence',
+    label: 'Sequenzdiagramm',
+    typePatterns: [/\bsequenzdiagramm\b/i, /\bsequence diagram\b/i],
+    notationChecks: [
+      { label: 'Lebenslinien sind klar benannt', patterns: [/\blebenslinie(?:n)?\b|\blifeline(?:s)?\b|\bobjekt(?:e)?\b|\bteilnehmer\b/i] },
+      { label: 'Nachrichten sind zeitlich geordnet', patterns: [/\bnachricht(?:en)?\b|\bmessage(?:s)?\b|\baufruf(?:e)?\b|\brequest\b|\bresponse\b/i] },
+      { label: 'Aktivierungen oder Ausfuehrungsspezifikationen sind plausibel', patterns: [/\baktivierung(?:en)?\b|\bausfuehrung(?:en)?\b|\bexecution specification\b/i] },
+      { label: 'Rueckgaben/Antworten sind nachvollziehbar', patterns: [/\br(?:\u00fc|ue)ckgabe(?:n)?\b|\bantwort(?:en)?\b|\breturn\b/i] },
+      { label: 'Chronologie passt zum beschriebenen Ablauf', patterns: [/\bchronolog(?:ie|isch)\b|\breihenfolge\b|\bablauf\b|\binteraktion(?:en)?\b/i] }
+    ],
+    fitPatterns: [/\binteraktion\b|\bapi\b|\bschnittstelle\b|\bworkflow\b|\bablauf\b|\bservice\b|\bclient\b|\bserver\b/i],
+    minNotation: 3
+  },
+  {
+    key: 'component',
+    label: 'Komponentendiagramm',
+    typePatterns: [/\bkomponentendiagramm\b/i, /\bcomponent diagram\b/i],
+    notationChecks: [
+      { label: 'Komponenten sind eindeutig benannt', patterns: [/\bkomponente(?:n)?\b|\bcomponent(?:s)?\b|\bmodul(?:e)?\b/i] },
+      { label: 'Schnittstellen sind sichtbar', patterns: [/\bschnittstelle(?:n)?\b|\binterface(?:s)?\b|\bapi\b|\bprovided\b|\brequired\b/i] },
+      { label: 'Abhaengigkeiten sind nachvollziehbar', patterns: [/\babhaengigkeit(?:en)?\b|\babh\u00e4ngigkeit(?:en)?\b|\bdependency\b|\bdepends\b/i] },
+      { label: 'Architekturbezug ist erkennbar', patterns: [/\barchitektur\b|\bsystemaufbau\b|\bschicht(?:en)?\b|\blayer(?:s)?\b/i] }
+    ],
+    fitPatterns: [/\barchitektur\b|\bschnittstelle\b|\bmodul\b|\bservice\b|\bkomponente\b|\bsystemdesign\b/i],
+    minNotation: 3
+  },
+  {
+    key: 'state',
+    label: 'Zustandsdiagramm',
+    typePatterns: [/\bzustandsdiagramm\b/i, /\bstate machine\b|\bstate diagram\b/i],
+    notationChecks: [
+      { label: 'Zustaende sind benannt', patterns: [/\bzustand(?:e|\u00e4nde|aende)?\b|\bstate(?:s)?\b/i] },
+      { label: 'Transitionen sind mit Ereignissen verknuepft', patterns: [/\btransition(?:en)?\b|\b(?:\u00fc|ue)bergang(?:e)?\b|\bereignis(?:se)?\b|\bevent(?:s)?\b/i] },
+      { label: 'Start-/Endzustand ist erkennbar', patterns: [/\bstartzustand\b|\bendzustand\b|\binitial\b|\bfinal\b/i] },
+      { label: 'Guards oder Aktionen sind plausibel', patterns: [/\bguard(?:s)?\b|\bbedingung(?:en)?\b|\baktion(?:en)?\b/i] }
+    ],
+    fitPatterns: [/\bstatus\b|\bzustand\b|\blebenszyklus\b|\bworkflow\b|\bprozess\b|\bvalidierung\b/i],
+    minNotation: 3
+  },
+  {
+    key: 'deployment',
+    label: 'Verteilungsdiagramm',
+    typePatterns: [/\bverteilungsdiagramm\b|\bdeploymentdiagramm\b/i, /\bdeployment diagram\b/i],
+    notationChecks: [
+      { label: 'Knoten/Geraete sind benannt', patterns: [/\bknoten\b|\bnode(?:s)?\b|\bgeraet(?:e)?\b|\bger\u00e4t(?:e)?\b|\bserver\b|\bclient\b/i] },
+      { label: 'Artefakte oder Deployments sind sichtbar', patterns: [/\bartefakt(?:e)?\b|\bartifact(?:s)?\b|\bdeployment\b|\bcontainer\b|\bpaket\b/i] },
+      { label: 'Kommunikationspfade sind nachvollziehbar', patterns: [/\bkommunikationspfad(?:e)?\b|\bverbindung(?:en)?\b|\bnetzwerk\b|\bprotokoll(?:e)?\b/i] },
+      { label: 'Infrastrukturbezug passt zum System', patterns: [/\binfrastruktur\b|\bserver\b|\bcloud\b|\bnetzwerk\b|\bumgebung\b/i] }
+    ],
+    fitPatterns: [/\binfrastruktur\b|\bserver\b|\bcloud\b|\bdeployment\b|\bnetzwerk\b|\bbetrieb\b|\bsystemumgebung\b/i],
+    minNotation: 3
+  }
+];
+
+function regexWithGlobal(pattern) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  return new RegExp(pattern.source, flags);
+}
+
+function excerptAt(text, index, before = 120, after = 300) {
+  return normalize(text.slice(Math.max(0, index - before), Math.min(text.length, index + after)));
+}
+
+function extractContextSnippets(text, pattern, limit = 8) {
+  const raw = normalize(text);
+  const snippets = [];
+  const regex = regexWithGlobal(pattern);
+  let match;
+  while ((match = regex.exec(raw)) !== null && snippets.length < limit) {
+    snippets.push(excerptAt(raw, match.index));
+  }
+  return snippets;
+}
+
+function isMissingUmlFigureText(text = '') {
+  return /\b(?:kein(?:e|en)?|ohne|fehlt|fehlend(?:e|es|er)?|nicht vorhanden|nur textlich|nur im flie(?:ss|ß)text)\b.{0,100}\b(?:abbildung|abb\.?|diagramm|grafik|bild)\b/i.test(text)
+    || /\b(?:abbildung|abb\.?|diagramm|grafik|bild)\b.{0,100}\b(?:fehlt|fehlend(?:e|es|er)?|nicht vorhanden|nur textlich|nur im flie(?:ss|ß)text)\b/i.test(text);
+}
+
+function extractFigureMentions(text = '') {
+  const raw = normalize(text);
+  const mentions = [];
+  const captionRegex = /\b(?:abbildung|abb\.?|figure|fig\.?)\s*(?:\d+(?:[.-]\d+)*)?(?:\s*[:.-]\s*)?.{0,260}/gi;
+  const umlContextRegex = /\b(?:uml|use[-\s]?case|anwendungsfall(?:diagramm)?|aktivit(?:\u00e4|ae)tsdiagramm|klassendiagramm|sequenzdiagramm|komponentendiagramm|deploymentdiagramm|verteilungsdiagramm|paketdiagramm|zustandsdiagramm)\b.{0,260}/gi;
+  let match;
+
+  while ((match = captionRegex.exec(raw)) !== null && mentions.length < 24) {
+    const textWindow = excerptAt(raw, match.index, 120, 420);
+    mentions.push({
+      source: isMissingUmlFigureText(textWindow)
+        ? 'missing-figure-note'
+        : UML_TEXT_PATTERN.test(textWindow) ? 'uml-caption-or-reference' : 'figure-caption-or-reference',
+      text: textWindow
+    });
+  }
+
+  while ((match = umlContextRegex.exec(raw)) !== null && mentions.length < 32) {
+    const textWindow = excerptAt(raw, match.index, 120, 360);
+    if (isMissingUmlFigureText(textWindow)) {
+      mentions.push({ source: 'missing-figure-note', text: textWindow });
+    } else if (UML_FIGURE_PATTERN.test(textWindow) || /\bdiagramm\b/i.test(textWindow)) {
+      mentions.push({ source: 'uml-context', text: textWindow });
+    }
+  }
+
+  const seen = new Set();
+  return mentions.filter((mention) => {
+    const key = mention.text.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function labelsForChecks(text, checks = []) {
+  return checks.filter((check) => hasAny(text, check.patterns)).map((check) => check.label);
+}
+
+function buildUmlAnalysis(doc, text) {
+  const raw = normalize(text);
+  const hasUmlText = UML_TEXT_PATTERN.test(raw);
+  const imageContexts = Array.isArray(doc.structure?.bodyImageContexts) ? doc.structure.bodyImageContexts : [];
+  const figureMentions = extractFigureMentions(raw);
+  const missingFigureMentions = figureMentions.filter((mention) => mention.source === 'missing-figure-note' && UML_TEXT_PATTERN.test(mention.text));
+  const umlFigureMentions = figureMentions.filter((mention) => mention.source !== 'missing-figure-note' && UML_TEXT_PATTERN.test(mention.text));
+  const umlImageContexts = imageContexts.filter((image) => UML_TEXT_PATTERN.test(image.nearbyText || ''));
+  const umlTextSnippets = extractContextSnippets(raw, UML_TEXT_PATTERN, 10);
+  const focusedText = normalize([
+    ...umlFigureMentions.map((mention) => mention.text),
+    ...umlImageContexts.map((image) => image.nearbyText),
+    ...umlTextSnippets
+  ].join(' '));
+  const analysisText = hasUmlText ? (focusedText || raw) : '';
+
+  const detectedTypes = UML_DIAGRAM_DEFINITIONS.map((definition) => {
+    const typeMentioned = hasAny(analysisText, definition.typePatterns);
+    const notationMatches = labelsForChecks(analysisText, definition.notationChecks);
+    const fitMatches = labelsForChecks(raw, [{ label: 'Dokumentationskontext passt zum Diagrammtyp', patterns: definition.fitPatterns }]);
+    return {
+      key: definition.key,
+      label: definition.label,
+      typeMentioned,
+      notationMatches,
+      missingNotation: definition.notationChecks.map((check) => check.label).filter((label) => !notationMatches.includes(label)),
+      fitMatches,
+      minNotation: definition.minNotation
+    };
+  }).filter((type) => type.typeMentioned || type.notationMatches.length > 0);
+
+  detectedTypes.sort((a, b) => {
+    const aScore = (a.typeMentioned ? 3 : 0) + a.notationMatches.length + a.fitMatches.length;
+    const bScore = (b.typeMentioned ? 3 : 0) + b.notationMatches.length + b.fitMatches.length;
+    return bScore - aScore;
+  });
+
+  return {
+    hasUmlText,
+    hasEmbeddedImages: Number(doc.structure?.bodyImageCount || 0) > 0,
+    hasFigureReference: umlFigureMentions.length > 0 || umlImageContexts.length > 0,
+    docxStructureAvailable: Boolean(doc.structure?.docxStructureAvailable),
+    figureMentions: umlFigureMentions.slice(0, 6),
+    missingFigureMentions: missingFigureMentions.slice(0, 6),
+    imageContexts: umlImageContexts.slice(0, 6),
+    umlTextSnippets: umlTextSnippets.slice(0, 6),
+    detectedTypes: detectedTypes.slice(0, 5),
+    bestType: detectedTypes[0] || null
+  };
+}
+
+function summarizeUmlEvidence(analysis) {
+  if (analysis.figureMentions.length) return analysis.figureMentions[0].text;
+  if (analysis.imageContexts.length) return `Bildumfeld: ${analysis.imageContexts[0].nearbyText}`;
+  if (analysis.missingFigureMentions.length) return analysis.missingFigureMentions[0].text;
+  if (analysis.umlTextSnippets.length) return analysis.umlTextSnippets[0];
+  return '-';
+}
+
+function findPhaseUmlContext(text, phasePatterns) {
+  const raw = normalize(text);
+  const lRaw = lower(raw);
+  for (const pattern of phasePatterns) {
+    const match = pattern.exec(lRaw);
+    if (match) {
+      const start = Math.max(0, match.index);
+      const end = Math.min(raw.length, match.index + 5000);
+      const section = raw.slice(start, end);
+      if (UML_TEXT_PATTERN.test(section)) {
+        return {
+          evidence: firstEvidence(section, [UML_TEXT_PATTERN], 'UML-Fund in Phase'),
+          section
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function evaluateUmlChecklist({ results, doc, text, phaseDefinitions }) {
+  const analysis = buildUmlAnalysis(doc, text);
+  const evidence = summarizeUmlEvidence(analysis);
+  const structureText = `DOCX-Struktur: ${analysis.docxStructureAvailable ? 'ja' : 'nein'}, Bilder im Dokumentkoerper: ${doc.structure?.bodyImageCount ?? 'nicht pruefbar'}.`;
+
+  if (analysis.docxStructureAvailable && analysis.hasEmbeddedImages && analysis.hasFigureReference) {
+    addResult(results, 'UML-Pruefung', 'UML-Diagramm als Abbildung vorhanden', 'gruen', 'UML-Abbildung oder Abbildungsverweis erkannt', `${structureText} ${evidence}`, 'Es gibt eingebettete Bilder und einen UML-nahen Abbildungs-/Kontextnachweis.', 'UML-Abbildung mit Nummer, Titel und Textverweis konsistent halten.', 'niedrig');
+  } else if (analysis.docxStructureAvailable && analysis.hasEmbeddedImages && analysis.hasUmlText) {
+    addResult(results, 'UML-Pruefung', 'UML-Diagramm als Abbildung vorhanden', 'gelb', 'Bild vorhanden, UML-Bezug aber nicht eindeutig', `${structureText} ${evidence}`, 'Im DOCX gibt es Bilder und UML-Text, aber keine eindeutig beschriftete oder referenzierte UML-Abbildung.', 'UML-Diagramm als Abbildung beschriften, im Text referenzieren und ins Abbildungsverzeichnis aufnehmen.', 'hoch');
+  } else if (analysis.hasUmlText) {
+    addResult(results, 'UML-Pruefung', 'UML-Diagramm als Abbildung vorhanden', 'rot', 'nur textlicher UML-Hinweis erkannt', evidence, 'UML wird im Fliesstext beschrieben, aber eine nachweisbare Abbildung fehlt oder ist bei diesem Dateiformat nicht strukturell pruefbar.', 'Eine echte UML-Abbildung einfuegen; der vorhandene Text kann als Erklaerung der Abbildung genutzt werden.', 'hoch');
+  } else if (analysis.hasEmbeddedImages) {
+    addResult(results, 'UML-Pruefung', 'UML-Diagramm als Abbildung vorhanden', 'rot', 'Bilder vorhanden, aber kein UML-Nachweis', structureText, 'Das Dokument enthaelt Bilder, aber keinen erkennbaren UML-Diagrammtyp oder UML-Verweis.', 'Mindestens ein passendes UML-Diagramm mit sprechender Beschriftung ergaenzen.', 'hoch');
+  } else {
+    addResult(results, 'UML-Pruefung', 'UML-Diagramm als Abbildung vorhanden', 'rot', 'nicht erkannt', structureText, 'Es wurde weder ein UML-Diagramm noch eine UML-Abbildung erkannt.', 'Mindestens ein UML-Diagramm als Abbildung in der passenden Projektphase ergaenzen.', 'hoch');
+  }
+
+  const bestType = analysis.bestType;
+  if (!analysis.hasUmlText) {
+    addResult(results, 'UML-Pruefung', 'UML-Notation fachlich plausibel', 'rot', 'nicht pruefbar', '-', 'Ohne UML-Diagrammtyp oder UML-Text kann die Notation nicht fachlich bewertet werden.', `UML-Diagramm ergaenzen. ${UML_RULEBOOK_NOTE}`, 'hoch');
+  } else if (!bestType) {
+    addResult(results, 'UML-Pruefung', 'UML-Notation fachlich plausibel', 'gelb', 'Diagrammtyp unklar', evidence, 'Es gibt UML-Hinweise, aber der konkrete Diagrammtyp ist nicht eindeutig erkennbar.', `Diagrammtyp in Caption und Text benennen. ${UML_RULEBOOK_NOTE}`, 'hoch');
+  } else if (bestType.notationMatches.length >= bestType.minNotation && analysis.hasFigureReference) {
+    addResult(results, 'UML-Pruefung', 'UML-Notation fachlich plausibel', 'gruen', `${bestType.label} mit plausiblen Notationshinweisen`, `Erkannt: ${bestType.notationMatches.join('; ')}. ${evidence}`, `Die wichtigsten Notationselemente fuer ${bestType.label} sind im Umfeld der UML-Erwaehnung nachvollziehbar.`, 'Bei aktivierter KI-Pruefung werden eingebettete DOCX-Bilder zusaetzlich visuell gegen die UML-Notation geprueft.', 'mittel');
+  } else if (bestType.notationMatches.length >= bestType.minNotation) {
+    addResult(results, 'UML-Pruefung', 'UML-Notation fachlich plausibel', 'gelb', `${bestType.label} textlich plausibel, Abbildung fehlt/unklar`, `Erkannt: ${bestType.notationMatches.join('; ')}. ${evidence}`, 'Die Beschreibung enthaelt passende UML-Notationselemente, aber der Abbildungsnachweis ist nicht ausreichend.', 'UML-Abbildung ergaenzen oder klar beschriften; anschliessend Notation gegen Diagrammtyp pruefen.', 'hoch');
+  } else {
+    addResult(results, 'UML-Pruefung', 'UML-Notation fachlich plausibel', 'gelb', `${bestType.label} erkannt, Notation unvollstaendig`, `Erkannt: ${bestType.notationMatches.join('; ') || bestType.label}. Fehlt/unklar: ${bestType.missingNotation.slice(0, 4).join('; ')}.`, `Fuer ${bestType.label} fehlen wichtige Notationshinweise aus der UML-Regelbasis.`, `Notation ergaenzen/pruefen: ${bestType.missingNotation.slice(0, 4).join(', ')}. ${UML_RULEBOOK_NOTE}`, 'hoch');
+  }
+
+  if (bestType?.fitMatches?.length) {
+    addResult(results, 'UML-Pruefung', 'UML-Inhaltsbezug zur Dokumentation', 'gruen', `${bestType.label} passt zum Dokumentkontext`, `Kontexttreffer: ${bestType.fitMatches.join('; ')}. ${evidence}`, 'Diagrammtyp und Dokumentationskontext passen semantisch zusammen.', 'Im Text kurz erklaeren, welche konkreten Dokumentationsaussagen durch das Diagramm belegt werden.', 'niedrig');
+  } else if (analysis.hasUmlText && bestType) {
+    addResult(results, 'UML-Pruefung', 'UML-Inhaltsbezug zur Dokumentation', 'gelb', 'Bezug nicht eindeutig', evidence, `Ein ${bestType.label} wurde erkannt, aber der Bezug zu Architektur, Prozess, Anforderungen oder Implementierung ist nicht eindeutig genug.`, 'Vor und nach der Abbildung kurz erlaeutern, welche Projektentscheidung oder welcher Ablauf dargestellt wird.', 'hoch');
+  } else {
+    addResult(results, 'UML-Pruefung', 'UML-Inhaltsbezug zur Dokumentation', 'rot', 'nicht bewertbar', '-', 'Ohne UML-Nachweis kann kein fachlicher Bezug zur Dokumentation bewertet werden.', 'UML-Diagramm passend zur beschriebenen Loesung einfuegen und im Text auswerten.', 'hoch');
+  }
+
+  for (const phase of phaseDefinitions) {
+    const phaseContext = findPhaseUmlContext(text, phase.patterns);
+    if (phaseContext) {
+      const phaseHasFigure = !isMissingUmlFigureText(phaseContext.section) && (UML_FIGURE_PATTERN.test(phaseContext.section) || /\babbildung\b|\babb\./i.test(phaseContext.section));
+      const phaseStatus = analysis.docxStructureAvailable && analysis.hasEmbeddedImages && phaseHasFigure ? 'gruen' : 'gelb';
+      const phaseAssessment = phaseHasFigure ? 'UML mit Abbildungsbezug erkannt' : 'UML nur textlich erkannt';
+      const phaseReason = phaseHasFigure
+        ? `Fuer die ${phase.name} gibt es einen UML-Hinweis mit Abbildungsbezug.`
+        : `Fuer die ${phase.name} gibt es UML-Text, aber keine eindeutig zugeordnete Abbildung.`;
+      const phaseRecommendation = phaseStatus === 'gruen'
+        ? 'Diagrammcaption, Textverweis und Abbildungsverzeichnis konsistent halten.'
+        : `Im Abschnitt ${phase.name} eine echte UML-Abbildung mit Caption und kurzem fachlichen Bezug ergaenzen.`;
+      addResult(results, 'UML-Pruefung', `UML-Diagramm in der ${phase.name}`, phaseStatus, phaseAssessment, phaseContext.evidence, phaseReason, phaseRecommendation, phaseStatus === 'gruen' ? 'niedrig' : 'hoch');
+    } else if (analysis.hasUmlText) {
+      addResult(results, 'UML-Pruefung', `UML-Diagramm in der ${phase.name}`, 'gelb', 'UML vorhanden, Phasenzuordnung unklar', evidence, `UML-Hinweise sind vorhanden, aber nicht eindeutig dieser Phase zuordenbar.`, `Im Abschnitt ${phase.name} ein passendes UML-Diagramm mit Beschriftung und Textverweis ergaenzen.`, 'hoch');
+    } else {
+      addResult(results, 'UML-Pruefung', `UML-Diagramm in der ${phase.name}`, 'rot', 'nicht erkannt', '-', `Kein UML-Diagrammhinweis fuer die ${phase.name} erkannt.`, `Mindestens ein UML-Diagramm in der ${phase.name} ergaenzen und im Text referenzieren.`, 'hoch');
+    }
+  }
+
+  return {
+    hasUmlText: analysis.hasUmlText,
+    hasEmbeddedImages: analysis.hasEmbeddedImages,
+    hasFigureReference: analysis.hasFigureReference,
+    detectedTypes: analysis.detectedTypes.map((type) => ({
+      label: type.label,
+      notationMatches: type.notationMatches,
+      missingNotation: type.missingNotation.slice(0, 6),
+      fitMatches: type.fitMatches
+    })),
+    figureMentions: analysis.figureMentions,
+    missingFigureMentions: analysis.missingFigureMentions,
+    imageContexts: analysis.imageContexts.map((image) => ({
+      index: image.index,
+      fileName: image.fileName,
+      contentType: image.contentType,
+      nearbyText: image.nearbyText
+    })),
+    umlTextSnippets: analysis.umlTextSnippets
+  };
+}
+
 function findPhaseUml(text, phasePatterns) {
   const umlTerms = /(uml|use[-\s]?case|anwendungsfall|aktivitätsdiagramm|aktivitaetsdiagramm|klassendiagramm|sequenzdiagramm|komponentendiagramm|deploymentdiagramm|paketdiagramm|zustandsdiagramm|datenflussdiagramm)/i;
   const raw = normalize(text);
@@ -817,16 +1251,7 @@ function localAnalyze(doc, AntragDoc, options = {}) {
     { name: 'Entwurfsphase', patterns: [/entwurfsphase/i, /architekturdesign/i, /systemdesign/i, /datenmodell/i, /pflichtenheft/i] },
     { name: 'Implementierungsphase', patterns: [/implementierungsphase/i, /realisierungsphase/i, /implementierung/i, /realisierung/i] }
   ];
-  for (const phase of phaseDefinitions) {
-    const evidence = findPhaseUml(text, phase.patterns);
-    if (evidence) {
-      addResult(results, 'UML-Prüfung', `UML-Diagramm in der ${phase.name}`, 'gruen', 'UML-/Diagrammhinweis erkannt', evidence, `Für die ${phase.name} wurde ein Diagrammhinweis erkannt.`, 'Prüfen, ob das Diagramm tatsächlich UML-konform und im richtigen Abschnitt verankert ist.', 'niedrig');
-    } else if (/(uml|use[-\s]?case|klassendiagramm|sequenzdiagramm|aktivitätsdiagramm|komponentendiagramm|deploymentdiagramm)/i.test(text)) {
-      addResult(results, 'UML-Prüfung', `UML-Diagramm in der ${phase.name}`, 'gelb', 'UML vorhanden, Phasenzuordnung unklar', firstEvidence(text, [/(uml|use[-\s]?case|klassendiagramm|sequenzdiagramm|aktivitätsdiagramm|komponentendiagramm|deploymentdiagramm)/i], 'Allgemeiner UML-Fund'), `UML-Hinweise sind vorhanden, aber nicht eindeutig dieser Phase zuordenbar.`, `Im Abschnitt ${phase.name} mindestens ein passendes UML-Diagramm mit Beschriftung und Textverweis ergänzen.`, 'hoch');
-    } else {
-      addResult(results, 'UML-Prüfung', `UML-Diagramm in der ${phase.name}`, 'rot', 'nicht erkannt', '-', `Kein UML-Diagrammhinweis für die ${phase.name} erkannt.`, `Mindestens ein UML-Diagramm in der ${phase.name} ergänzen und im Text referenzieren.`, 'hoch');
-    }
-  }
+  meta.umlAnalysis = evaluateUmlChecklist({ results, doc, text, phaseDefinitions });
 
   const qsPatterns = [/qualitätssicherung/i, /qualitätsmanagement/i, /testphase/i, /automatisierte tests/i, /manuelle tests/i, /unit[-\s]?test/i, /integrationstest/i, /testfall/i, /grenzwertanalyse/i, /pfadabdeckung/i];
   const qsEvidence = firstEvidence(text, qsPatterns, 'QS/Test');
@@ -931,8 +1356,21 @@ function extractJsonObject(output = '') {
   throw new Error('KI-Antwort war kein gültiges JSON.');
 }
 
+function selectUmlReviewImages(doc, maxImages = 4) {
+  const images = Array.isArray(doc.images) ? doc.images.filter((image) => image.base64 && image.contentType) : [];
+  if (!images.length) return [];
+  const umlNearImages = images.filter((image) => UML_TEXT_PATTERN.test(image.nearbyText || ''));
+  if (umlNearImages.length) return umlNearImages.slice(0, maxImages);
+  if (UML_TEXT_PATTERN.test(doc.text || '')) return images.slice(0, maxImages);
+  return [];
+}
+
 async function runAiReview({ doc, AntragDoc, baseReport, options }) {
   const client = createClient();
+  const umlReviewImages = selectUmlReviewImages(doc);
+  const imageContextBlock = umlReviewImages.length
+    ? `UML-nahe DOCX-Bilder fuer die Bildpruefung:\n${umlReviewImages.map((image, index) => `${index + 1}. ${image.fileName} | Kontext: ${image.nearbyText || '-'}`).join('\n')}`
+    : 'Keine DOCX-Bilder fuer eine visuelle UML-Bildpruefung verfuegbar.';
   const prompt = `
 Du prüfst eine IHK-Projektdokumentation als Analysewerkzeug. Erzeuge ausschließlich JSON.
 Keine Markdown-Tabelle, keine Kommentare außerhalb des JSON.
@@ -974,10 +1412,30 @@ Projektantrag-Auszug:
 ${AntragDoc?.text ? truncate(AntragDoc.text, 8000) : 'Kein Projektantrag hochgeladen.'}
 `.trim();
 
+  const enrichedPrompt = `${prompt}
+
+Zusaetzliche UML-Pruefanweisung:
+- Pruefe, ob ein UML-Diagramm wirklich als Abbildung vorhanden ist oder nur im Fliesstext beschrieben wird.
+- Wenn UML-Bilder angehaengt sind, pruefe die Abbildung fachlich nach Diagrammtyp, Notationselementen und inhaltlichem Bezug zur Dokumentation.
+- Wenn kein UML-Bild angehaengt ist, bewerte trotzdem die textliche UML-Beschreibung und benenne klar, dass die Abbildung fehlt.
+
+Regelbasierte UML-Auswertung:
+${JSON.stringify(baseReport.metadata?.umlAnalysis || {}, null, 2)}
+
+${imageContextBlock}`.trim();
+
+  const inputContent = [{ type: 'input_text', text: enrichedPrompt }];
+  for (const image of umlReviewImages) {
+    inputContent.push({
+      type: 'input_image',
+      image_url: `data:${image.contentType};base64,${image.base64}`
+    });
+  }
+
   const response = await client.responses.create({
     model,
     instructions: 'Du bist ein strenges, aber faires IHK-Doku-Prüfwerkzeug. Du gibst ausschließlich gültiges JSON zurück.',
-    input: prompt,
+    input: [{ role: 'user', content: inputContent }],
     max_output_tokens: maxOutputTokens
   });
 
@@ -1358,6 +1816,8 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: error?.message || 'Unbekannter Serverfehler.' });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`IHK DokuTool läuft auf http://localhost:${port}`);
 });
+
+export { app, server };
