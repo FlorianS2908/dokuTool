@@ -224,7 +224,7 @@ function setAuthMode(nextMode) {
   authTitle.textContent = isRegister ? 'Registrieren' : 'Einloggen';
   authSubtitle.textContent = isRegister
     ? 'Lege ein Konto mit E-Mail und Passwort an.'
-    : 'Melde dich an, um das IHK DokuTool zu nutzen.';
+    : 'Melde dich an, um fortzufahren.';
   authSubmitButton.textContent = isRegister ? 'Registrieren' : 'Einloggen';
   authToggleButton.textContent = isRegister ? 'Zum Login' : 'Neu registrieren';
   displayNameLabel.classList.toggle('hidden', !isRegister);
