@@ -72,6 +72,7 @@ const quizQuestionSchema = {
   firestorePath: 'fragenpools/{poolId}/questions/{questionId}',
   fields: ['topic', 'question', 'type', 'options', 'solution', 'explanation', 'questionIndex']
 };
+const quizQuestionPoolRoot = 'fragenpools';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -200,6 +201,120 @@ function quizProfileForUser(user) {
     lastName: user?.quizProfile?.lastName ?? user?.lastName ?? fallback.lastName,
     fach: user?.quizProfile?.fach ?? user?.fach ?? '',
     role: user?.role || 'user'
+  };
+}
+
+function isFirestoreQuizEnabled() {
+  return process.env.FIRESTORE_ENABLED === 'true';
+}
+
+async function getQuizFirestore() {
+  if (!isFirestoreQuizEnabled()) {
+    const error = new Error('Firestore ist noch nicht aktiviert. Bitte FIRESTORE_ENABLED=true und Service-Account konfigurieren.');
+    error.status = 503;
+    throw error;
+  }
+  const { getFirestore } = await import('firebase-admin/firestore');
+  return getFirestore();
+}
+
+function normalizeQuizPoolId(poolId) {
+  const value = String(poolId || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,120}$/.test(value)) {
+    const error = new Error('Bitte einen gueltigen Fragenpool waehlen.');
+    error.status = 400;
+    throw error;
+  }
+  return value;
+}
+
+async function loadQuizQuestionPools() {
+  if (!isFirestoreQuizEnabled()) {
+    return {
+      connected: false,
+      root: quizQuestionPoolRoot,
+      status: 'Firestore ist noch nicht verbunden. Nach der Verbindung erscheinen hier die Fragenpools.',
+      pools: []
+    };
+  }
+
+  try {
+    const db = await getQuizFirestore();
+    const snapshot = await db.collection(quizQuestionPoolRoot).get();
+    const pools = await Promise.all(snapshot.docs.map(async (doc) => {
+      const data = doc.data() || {};
+      let topics = [];
+      let previewCount = 0;
+
+      try {
+        const questionSnapshot = await doc.ref
+          .collection('questions')
+          .orderBy('questionIndex', 'asc')
+          .limit(200)
+          .get();
+        previewCount = questionSnapshot.size;
+        topics = Array.from(new Set(
+          questionSnapshot.docs
+            .map((questionDoc) => String(questionDoc.data()?.topic || '').trim())
+            .filter(Boolean)
+        )).sort((a, b) => a.localeCompare(b, 'de'));
+      } catch {
+        topics = [];
+      }
+
+      return {
+        id: doc.id,
+        label: data.label || data.name || data.title || doc.id,
+        description: data.description || data.info || '',
+        topics,
+        previewCount
+      };
+    }));
+
+    pools.sort((a, b) => String(a.label).localeCompare(String(b.label), 'de'));
+
+    return {
+      connected: true,
+      root: quizQuestionPoolRoot,
+      status: pools.length
+        ? `${pools.length} Fragenpool${pools.length === 1 ? '' : 's'} gefunden.`
+        : 'Firestore ist verbunden, aber es wurden noch keine Fragenpools gefunden.',
+      pools
+    };
+  } catch (error) {
+    return {
+      connected: false,
+      root: quizQuestionPoolRoot,
+      status: `Firestore-Fragenpools konnten nicht geladen werden: ${error.message}`,
+      pools: []
+    };
+  }
+}
+
+async function loadQuizQuestions({ poolId, topic, max }) {
+  const db = await getQuizFirestore();
+  const normalizedPoolId = normalizeQuizPoolId(poolId);
+  const normalizedTopic = String(topic || '').trim();
+  const limitValue = Math.min(Math.max(Number(max) || 20, 1), 50);
+
+  let ref = db.collection(quizQuestionPoolRoot).doc(normalizedPoolId).collection('questions');
+  let query = ref.orderBy('questionIndex', 'asc').limit(limitValue);
+  if (normalizedTopic) {
+    query = ref
+      .where('topic', '==', normalizedTopic)
+      .orderBy('questionIndex', 'asc')
+      .limit(limitValue);
+  }
+
+  const snapshot = await query.get();
+  return {
+    poolId: normalizedPoolId,
+    topic: normalizedTopic,
+    max: limitValue,
+    questions: snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }))
   };
 }
 
@@ -2036,13 +2151,28 @@ app.post('/api/profile/photo', requireAuth, profileUpload.single('photo'), async
 });
 
 app.get('/api/quiz/config', requireAuth, async (req, res) => {
+  const questionPools = await loadQuizQuestionPools();
   res.json({
     sourceRepo: quizSourceRepo,
     fachrichtungen: quizFachrichtungen,
     roleTemplates: quizRoleTemplates,
     questionSchema: quizQuestionSchema,
+    questionPools,
     profile: quizProfileForUser(req.user)
   });
+});
+
+app.get('/api/quiz/questions', requireAuth, async (req, res) => {
+  try {
+    const data = await loadQuizQuestions({
+      poolId: req.query.poolId,
+      topic: req.query.topic,
+      max: req.query.max
+    });
+    res.json(data);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || 'Quizfragen konnten nicht geladen werden.' });
+  }
 });
 
 app.patch('/api/quiz/profile', requireAuth, async (req, res) => {

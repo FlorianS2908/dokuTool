@@ -18,6 +18,14 @@ const saveQuizProfileButton = document.querySelector('#saveQuizProfileButton');
 const quizProfileStatus = document.querySelector('#quizProfileStatus');
 const quizRolesList = document.querySelector('#quizRolesList');
 const quizQuestionFields = document.querySelector('#quizQuestionFields');
+const quizPoolSelect = document.querySelector('#quizPoolSelect');
+const quizTopicSelect = document.querySelector('#quizTopicSelect');
+const quizQuestionLimitInput = document.querySelector('#quizQuestionLimitInput');
+const loadQuizQuestionsButton = document.querySelector('#loadQuizQuestionsButton');
+const quizPoolStatus = document.querySelector('#quizPoolStatus');
+const quizPoolMeta = document.querySelector('#quizPoolMeta');
+const quizResolvedPath = document.querySelector('#quizResolvedPath');
+const quizQuestionPreview = document.querySelector('#quizQuestionPreview');
 const authForm = document.querySelector('#authForm');
 const authTitle = document.querySelector('#authTitle');
 const authSubtitle = document.querySelector('#authSubtitle');
@@ -28,6 +36,10 @@ const displayNameLabel = document.querySelector('#displayNameLabel');
 const displayNameInputAuth = document.querySelector('#displayNameInputAuth');
 const emailInput = document.querySelector('#emailInput');
 const passwordInput = document.querySelector('#passwordInput');
+
+const setupWidget = document.querySelector('#setupWidget');
+const setupButton = document.querySelector('#setupButton');
+const setupDropdown = document.querySelector('#setupDropdown');
 
 const profileWidget = document.querySelector('#profileWidget');
 const profileButton = document.querySelector('#profileButton');
@@ -158,6 +170,8 @@ function showAuth(message = '') {
   workspaceView.classList.add('hidden');
   quizView.classList.add('hidden');
   appShell.classList.add('hidden');
+  setupWidget.classList.add('hidden');
+  setupDropdown.classList.add('hidden');
   profileWidget.classList.add('hidden');
   profileDropdown.classList.add('hidden');
   authStatus.textContent = message;
@@ -172,6 +186,8 @@ function showWorkspace(user = currentUser) {
   workspaceView.classList.remove('hidden');
   quizView.classList.add('hidden');
   appShell.classList.add('hidden');
+  setupWidget.classList.add('hidden');
+  setupDropdown.classList.add('hidden');
   profileWidget.classList.remove('hidden');
   profileDropdown.classList.add('hidden');
 }
@@ -182,6 +198,8 @@ function showDokuTool(user = currentUser) {
   workspaceView.classList.add('hidden');
   quizView.classList.add('hidden');
   appShell.classList.remove('hidden');
+  setupWidget.classList.add('hidden');
+  setupDropdown.classList.add('hidden');
   profileWidget.classList.remove('hidden');
   loadIhkProfiles();
   loadChatHistory();
@@ -193,6 +211,8 @@ function showQuizTool() {
   workspaceView.classList.add('hidden');
   appShell.classList.add('hidden');
   quizView.classList.remove('hidden');
+  setupWidget.classList.remove('hidden');
+  setupDropdown.classList.add('hidden');
   profileWidget.classList.remove('hidden');
   profileDropdown.classList.add('hidden');
   loadQuizTool();
@@ -251,8 +271,14 @@ authForm.addEventListener('submit', async (event) => {
   }
 });
 
+setupButton.addEventListener('click', () => {
+  setupDropdown.classList.toggle('hidden');
+  profileDropdown.classList.add('hidden');
+});
+
 profileButton.addEventListener('click', () => {
   profileDropdown.classList.toggle('hidden');
+  setupDropdown.classList.add('hidden');
 });
 
 saveProfileButton.addEventListener('click', async () => {
@@ -326,6 +352,44 @@ quizFachSelect.addEventListener('change', () => {
   renderFachInfo();
 });
 
+quizPoolSelect.addEventListener('change', () => {
+  renderQuizTopics();
+  renderQuizPoolSelection();
+});
+
+quizTopicSelect.addEventListener('change', () => {
+  renderQuizPoolSelection();
+});
+
+quizQuestionLimitInput.addEventListener('change', () => {
+  renderQuizPoolSelection();
+});
+
+loadQuizQuestionsButton.addEventListener('click', async () => {
+  const poolId = quizPoolSelect.value;
+  if (!poolId) return;
+
+  const params = new URLSearchParams({
+    poolId,
+    topic: quizTopicSelect.value,
+    max: quizQuestionLimitInput.value || '20'
+  });
+
+  loadQuizQuestionsButton.disabled = true;
+  quizPoolStatus.textContent = 'Fragen werden geladen ...';
+  quizQuestionPreview.innerHTML = '';
+
+  try {
+    const data = await apiFetch(`/api/quiz/questions?${params.toString()}`);
+    renderQuestionPreview(data.questions || []);
+    quizPoolStatus.textContent = `${data.questions?.length || 0} Fragen geladen.`;
+  } catch (error) {
+    quizPoolStatus.textContent = error.message;
+  } finally {
+    loadQuizQuestionsButton.disabled = !quizPoolSelect.value;
+  }
+});
+
 saveQuizProfileButton.addEventListener('click', async () => {
   quizProfileStatus.textContent = 'Quiz-Profil wird gespeichert ...';
   saveQuizProfileButton.disabled = true;
@@ -366,6 +430,7 @@ function renderQuizTool(data) {
   renderQuizProfile(data.profile || {});
   renderRoles(data.roleTemplates || []);
   renderQuestionSchema(data.questionSchema || {});
+  renderQuestionPools(data.questionPools || {});
 }
 
 function renderFachOptions(fachrichtungen) {
@@ -418,6 +483,114 @@ function renderQuestionSchema(schema) {
     const item = document.createElement('span');
     item.textContent = field;
     quizQuestionFields.appendChild(item);
+  }
+}
+
+function quizPools() {
+  return Array.isArray(quizConfig?.questionPools?.pools) ? quizConfig.questionPools.pools : [];
+}
+
+function selectedQuizPool() {
+  return quizPools().find((pool) => pool.id === quizPoolSelect.value) || null;
+}
+
+function renderQuestionPools(questionPools) {
+  const pools = Array.isArray(questionPools.pools) ? questionPools.pools : [];
+  const previousPool = quizPoolSelect.value;
+  quizPoolSelect.innerHTML = '';
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = pools.length ? 'Bitte Fragenpool wählen' : 'Firestore noch nicht verbunden';
+  quizPoolSelect.appendChild(placeholder);
+
+  for (const pool of pools) {
+    const option = document.createElement('option');
+    option.value = pool.id;
+    option.textContent = pool.label || pool.id;
+    quizPoolSelect.appendChild(option);
+  }
+
+  quizPoolSelect.disabled = pools.length === 0;
+  quizPoolSelect.value = pools.some((pool) => pool.id === previousPool) ? previousPool : '';
+  quizPoolStatus.textContent = questionPools.status || '';
+  quizQuestionPreview.innerHTML = '';
+
+  renderQuizTopics();
+  renderQuizPoolSelection();
+}
+
+function renderQuizTopics() {
+  const pool = selectedQuizPool();
+  const previousTopic = quizTopicSelect.value;
+  quizTopicSelect.innerHTML = '';
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = pool ? 'Alle Topics' : 'Erst Pool wählen';
+  quizTopicSelect.appendChild(placeholder);
+
+  for (const topic of pool?.topics || []) {
+    const option = document.createElement('option');
+    option.value = topic;
+    option.textContent = topic;
+    quizTopicSelect.appendChild(option);
+  }
+
+  quizTopicSelect.disabled = !pool;
+  quizTopicSelect.value = (pool?.topics || []).includes(previousTopic) ? previousTopic : '';
+}
+
+function renderQuizPoolSelection() {
+  const pool = selectedQuizPool();
+  const connected = Boolean(quizConfig?.questionPools?.connected);
+  const root = quizConfig?.questionPools?.root || 'fragenpools';
+  const topic = quizTopicSelect.value;
+  const max = Math.min(Math.max(Number(quizQuestionLimitInput.value) || 20, 1), 50);
+  quizQuestionLimitInput.value = String(max);
+
+  if (!pool) {
+    quizResolvedPath.textContent = quizConfig?.questionSchema?.firestorePath || '-';
+    quizPoolMeta.innerHTML = '';
+    loadQuizQuestionsButton.disabled = true;
+    return;
+  }
+
+  quizResolvedPath.textContent = topic
+    ? `${root}/${pool.id}/questions?topic=${topic}&limit=${max}`
+    : `${root}/${pool.id}/questions?limit=${max}`;
+  quizPoolMeta.innerHTML = `
+    <span>${escapeHtml(pool.description || 'Fragenpool aus Firestore')}</span>
+    <span>${escapeHtml(String(pool.topics?.length || 0))} Topics</span>
+    <span>${escapeHtml(String(pool.previewCount || 0))} Fragen in der Vorschau</span>
+  `;
+  loadQuizQuestionsButton.disabled = !connected;
+  quizPoolStatus.textContent = connected
+    ? 'Bereit zum Laden der Fragen.'
+    : (quizConfig?.questionPools?.status || 'Firestore ist noch nicht verbunden.');
+}
+
+function renderQuestionPreview(questions) {
+  quizQuestionPreview.innerHTML = '';
+  if (!questions.length) {
+    quizQuestionPreview.innerHTML = '<p class="empty-note">Keine Fragen für diese Auswahl gefunden.</p>';
+    return;
+  }
+
+  for (const question of questions.slice(0, 12)) {
+    const article = document.createElement('article');
+    article.className = 'question-preview-item';
+    const solution = Array.isArray(question.solution)
+      ? question.solution.join(', ')
+      : question.solution || '';
+    article.innerHTML = `
+      <div>
+        <strong>${escapeHtml(question.question || question.id || 'Frage')}</strong>
+        <small>${escapeHtml(question.topic || 'Ohne Topic')}${question.type ? ` · ${escapeHtml(question.type)}` : ''}</small>
+      </div>
+      ${solution ? `<p>${escapeHtml(solution)}</p>` : ''}
+    `;
+    quizQuestionPreview.appendChild(article);
   }
 }
 

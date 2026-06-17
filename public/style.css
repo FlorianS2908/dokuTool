@@ -162,9 +162,16 @@ label { display: grid; gap: 7px; color: #2f4442; font-weight: 800; }
   z-index: 30;
 }
 
+.setup-widget {
+  position: fixed;
+  top: 23px;
+  right: 92px;
+  z-index: 31;
+}
+
 .profile-button {
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  height: 56px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -176,6 +183,32 @@ label { display: grid; gap: 7px; color: #2f4442; font-weight: 800; }
   box-shadow: var(--shadow-md);
 }
 
+.icon-button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.setup-button {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(14, 37, 41, .92);
+  box-shadow: var(--shadow-sm);
+}
+
+.setup-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .profile-button img {
   width: 100%;
   height: 100%;
@@ -184,7 +217,7 @@ label { display: grid; gap: 7px; color: #2f4442; font-weight: 800; }
 
 .profile-dropdown {
   position: absolute;
-  top: 56px;
+  top: 68px;
   right: 0;
   width: min(320px, calc(100vw - 32px));
   display: grid;
@@ -194,6 +227,49 @@ label { display: grid; gap: 7px; color: #2f4442; font-weight: 800; }
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow-md);
+}
+
+.setup-dropdown {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 86px));
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+}
+
+.setup-dropdown header {
+  display: grid;
+  gap: 4px;
+}
+
+.setup-dropdown h2 {
+  font-size: 1.1rem;
+}
+
+.setup-dropdown p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.setup-block {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.setup-block h3 {
+  font-size: 1rem;
 }
 
 .profile-dropdown small {
@@ -382,6 +458,56 @@ label { display: grid; gap: 7px; color: #2f4442; font-weight: 800; }
 
 .quiz-card-wide { grid-column: 1 / -1; }
 .quiz-card h2 { font-size: 1.17rem; }
+
+.quiz-pool-card {
+  gap: 15px;
+}
+
+.quiz-pool-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 1fr) minmax(120px, .55fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.quiz-pool-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quiz-pool-meta span {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: .88rem;
+  font-weight: 800;
+}
+
+.question-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.question-preview-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.question-preview-item small {
+  display: block;
+  margin-top: 4px;
+}
+
+.question-preview-item p {
+  color: var(--text);
+}
 
 .eyebrow {
   color: var(--primary);
@@ -794,6 +920,8 @@ th {
   .composer { grid-template-columns: 1fr; }
   .panel-header { padding-right: 18px; }
   .profile-widget { top: 12px; right: 12px; }
+  .setup-widget { top: 20px; right: 82px; }
+  .quiz-pool-controls { grid-template-columns: 1fr; }
   .workspace-view,
   .quiz-view { padding: 20px; }
   .workspace-header { padding-right: 72px; }
@@ -830,5 +958,16 @@ th {
   .panel-logo {
     width: 92px;
     height: 44px;
+  }
+  .profile-button {
+    width: 52px;
+    height: 52px;
+  }
+  .setup-widget {
+    right: 76px;
+  }
+  .setup-button {
+    width: 38px;
+    height: 38px;
   }
 }
