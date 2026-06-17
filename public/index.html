@@ -201,6 +201,16 @@
             <small>IHK Training</small>
           </span>
         </button>
+
+        <button id="openTimerQuizButton" class="tool-tile" type="button">
+          <span class="tool-visual timer-tool-visual">
+            <img src="assets/quiz-logo-tight.png" alt="" />
+          </span>
+          <span class="tool-copy">
+            <strong>TimerQuiz</strong>
+            <small>JSON & Code</small>
+          </span>
+        </button>
       </div>
     </div>
   </section>
@@ -303,6 +313,36 @@
           <button id="quizClearButton" class="secondary" type="button">Chat leeren</button>
         </article>
       </section>
+    </section>
+  </section>
+
+  <section id="timerQuizView" class="app-shell timer-quiz-shell hidden">
+    <aside class="sidebar quiz-sidebar">
+      <div class="brand">
+        <img class="brand-logo quiz-brand-logo" src="assets/quiz-logo-tight.png" alt="TimerQuiz" />
+        <div>
+          <h1>TimerQuiz</h1>
+          <p>JSON-Fragenpool und Codefragen</p>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="TimerQuiz-Bereiche">
+        <button id="backToWorkspaceFromTimerButton" class="tab workspace-tab" type="button">Tool-Auswahl</button>
+        <button class="tab active" type="button">Timer-Test</button>
+      </nav>
+
+      <section class="hint">
+        <strong>JSON:</strong>
+        Lade eigene Fragenpools direkt im Tool. Fragen mit Python-Code werden formatiert dargestellt.
+      </section>
+
+      <section class="hint soft">
+        Der TimerQuiz laeuft als React/TypeScript-Modul und bleibt von der Firestore-Quizstruktur getrennt.
+      </section>
+    </aside>
+
+    <section class="panel visible timer-quiz-panel">
+      <div id="timerQuizRoot"></div>
     </section>
   </section>
 
@@ -499,6 +539,7 @@
     </section>
   </main>
 
+  <script type="module" src="timer-quiz.bundle.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

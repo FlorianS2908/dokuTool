@@ -2,11 +2,14 @@ const appShell = document.querySelector('#appShell');
 const authView = document.querySelector('#authView');
 const workspaceView = document.querySelector('#workspaceView');
 const quizView = document.querySelector('#quizView');
+const timerQuizView = document.querySelector('#timerQuizView');
 const workspaceGreeting = document.querySelector('#workspaceGreeting');
 const openDokuToolButton = document.querySelector('#openDokuToolButton');
 const openQuizToolButton = document.querySelector('#openQuizToolButton');
+const openTimerQuizButton = document.querySelector('#openTimerQuizButton');
 const backToWorkspaceButton = document.querySelector('#backToWorkspaceButton');
 const backToWorkspaceFromDokuButton = document.querySelector('#backToWorkspaceFromDokuButton');
+const backToWorkspaceFromTimerButton = document.querySelector('#backToWorkspaceFromTimerButton');
 const quizStatus = document.querySelector('#quizStatus');
 const quizFirestorePath = document.querySelector('#quizFirestorePath');
 const quizFirstNameInput = document.querySelector('#quizFirstNameInput');
@@ -202,6 +205,7 @@ function showAuth(message = '') {
   authView.classList.remove('hidden');
   workspaceView.classList.add('hidden');
   quizView.classList.add('hidden');
+  timerQuizView.classList.add('hidden');
   appShell.classList.add('hidden');
   setupWidget.classList.add('hidden');
   setupDropdown.classList.add('hidden');
@@ -218,6 +222,7 @@ function showWorkspace(user = currentUser) {
   authView.classList.add('hidden');
   workspaceView.classList.remove('hidden');
   quizView.classList.add('hidden');
+  timerQuizView.classList.add('hidden');
   appShell.classList.add('hidden');
   setupWidget.classList.add('hidden');
   setupDropdown.classList.add('hidden');
@@ -230,6 +235,7 @@ function showDokuTool(user = currentUser) {
   authView.classList.add('hidden');
   workspaceView.classList.add('hidden');
   quizView.classList.add('hidden');
+  timerQuizView.classList.add('hidden');
   appShell.classList.remove('hidden');
   setupWidget.classList.remove('hidden');
   setupDropdown.classList.add('hidden');
@@ -246,6 +252,7 @@ function showQuizTool() {
   authView.classList.add('hidden');
   workspaceView.classList.add('hidden');
   appShell.classList.add('hidden');
+  timerQuizView.classList.add('hidden');
   quizView.classList.remove('hidden');
   setupWidget.classList.remove('hidden');
   setupDropdown.classList.add('hidden');
@@ -257,6 +264,18 @@ function showQuizTool() {
   loadQuizChatHistory();
   activateQuizNav(firstVisibleQuizTarget(), false);
   loadQuizTool();
+}
+
+function showTimerQuizTool() {
+  authView.classList.add('hidden');
+  workspaceView.classList.add('hidden');
+  appShell.classList.add('hidden');
+  quizView.classList.add('hidden');
+  timerQuizView.classList.remove('hidden');
+  setupWidget.classList.add('hidden');
+  setupDropdown.classList.add('hidden');
+  profileWidget.classList.remove('hidden');
+  profileDropdown.classList.add('hidden');
 }
 
 function setAuthMode(nextMode) {
@@ -567,11 +586,19 @@ openQuizToolButton.addEventListener('click', () => {
   showQuizTool();
 });
 
+openTimerQuizButton.addEventListener('click', () => {
+  showTimerQuizTool();
+});
+
 backToWorkspaceButton.addEventListener('click', () => {
   showWorkspace();
 });
 
 backToWorkspaceFromDokuButton.addEventListener('click', () => {
+  showWorkspace();
+});
+
+backToWorkspaceFromTimerButton.addEventListener('click', () => {
   showWorkspace();
 });
 
