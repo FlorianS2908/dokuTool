@@ -7,7 +7,6 @@ const openDokuToolButton = document.querySelector('#openDokuToolButton');
 const openQuizToolButton = document.querySelector('#openQuizToolButton');
 const backToWorkspaceButton = document.querySelector('#backToWorkspaceButton');
 const backToWorkspaceFromDokuButton = document.querySelector('#backToWorkspaceFromDokuButton');
-const openDokuFromQuizButton = document.querySelector('#openDokuFromQuizButton');
 const quizStatus = document.querySelector('#quizStatus');
 const quizFirestorePath = document.querySelector('#quizFirestorePath');
 const quizFirstNameInput = document.querySelector('#quizFirstNameInput');
@@ -40,6 +39,18 @@ const passwordInput = document.querySelector('#passwordInput');
 const setupWidget = document.querySelector('#setupWidget');
 const setupButton = document.querySelector('#setupButton');
 const setupDropdown = document.querySelector('#setupDropdown');
+const setupTitle = document.querySelector('#setupTitle');
+const setupSubtitle = document.querySelector('#setupSubtitle');
+const dokuSettingsContent = document.querySelector('#dokuSettingsContent');
+const quizSettingsContent = document.querySelector('#quizSettingsContent');
+const showHistoryToggle = document.querySelector('#showHistoryToggle');
+const showChatToggle = document.querySelector('#showChatToggle');
+const dokuSettingsStatus = document.querySelector('#dokuSettingsStatus');
+const showQuizDashboardToggle = document.querySelector('#showQuizDashboardToggle');
+const showQuizPoolToggle = document.querySelector('#showQuizPoolToggle');
+const showQuizHistoryToggle = document.querySelector('#showQuizHistoryToggle');
+const showQuizChatToggle = document.querySelector('#showQuizChatToggle');
+const quizSettingsStatus = document.querySelector('#quizSettingsStatus');
 
 const profileWidget = document.querySelector('#profileWidget');
 const profileButton = document.querySelector('#profileButton');
@@ -60,6 +71,24 @@ const panels = {
   chat: document.querySelector('#chatPanel')
 };
 const tabs = document.querySelectorAll('.tab[data-tab]');
+const quizNavButtons = document.querySelectorAll('.quiz-sidebar [data-quiz-target]');
+const historyTabButton = document.querySelector('#historyTabButton');
+const chatTabButton = document.querySelector('#chatTabButton');
+const quizDashboardTabButton = document.querySelector('#quizDashboardTabButton');
+const quizPoolTabButton = document.querySelector('#quizPoolTabButton');
+const quizHistoryTabButton = document.querySelector('#quizHistoryTabButton');
+const quizChatTabButton = document.querySelector('#quizChatTabButton');
+const quizDashboardCard = document.querySelector('#quizDashboardCard');
+const quizPoolCard = document.querySelector('#quizPoolCard');
+const quizHistoryCard = document.querySelector('#quizHistoryCard');
+const quizChatCard = document.querySelector('#quizChatCard');
+const quizHistoryList = document.querySelector('#quizHistoryList');
+const quizChatForm = document.querySelector('#quizChatForm');
+const quizMessageInput = document.querySelector('#quizMessageInput');
+const quizMessages = document.querySelector('#quizMessages');
+const quizSendButton = document.querySelector('#quizSendButton');
+const quizClearButton = document.querySelector('#quizClearButton');
+const quizChatStatus = document.querySelector('#quizChatStatus');
 
 const analyzeForm = document.querySelector('#analyzeForm');
 const analyzeButton = document.querySelector('#analyzeButton');
@@ -88,8 +117,12 @@ let currentUser = null;
 let authMode = 'login';
 let currentReport = null;
 let history = [];
+let quizHistory = [];
+let quizChatHistory = [];
 let quizConfig = null;
 let ihkProfilesLoaded = false;
+let dokuSettings = { history: true, chat: true };
+let quizSettings = { dashboard: true, pool: true, history: true, chat: true };
 
 function statusLabel(status) {
   return {
@@ -198,12 +231,15 @@ function showDokuTool(user = currentUser) {
   workspaceView.classList.add('hidden');
   quizView.classList.add('hidden');
   appShell.classList.remove('hidden');
-  setupWidget.classList.add('hidden');
+  setupWidget.classList.remove('hidden');
   setupDropdown.classList.add('hidden');
   profileWidget.classList.remove('hidden');
+  setSetupMode('doku');
+  loadDokuSettings();
+  selectDokuTab('checker');
   loadIhkProfiles();
-  loadChatHistory();
-  loadHistory();
+  if (dokuSettings.chat) loadChatHistory();
+  if (dokuSettings.history) loadHistory();
 }
 
 function showQuizTool() {
@@ -215,6 +251,11 @@ function showQuizTool() {
   setupDropdown.classList.add('hidden');
   profileWidget.classList.remove('hidden');
   profileDropdown.classList.add('hidden');
+  setSetupMode('quiz');
+  loadQuizSettings();
+  loadQuizHistory();
+  loadQuizChatHistory();
+  activateQuizNav(firstVisibleQuizTarget(), false);
   loadQuizTool();
 }
 
@@ -232,13 +273,174 @@ function setAuthMode(nextMode) {
   authStatus.textContent = '';
 }
 
+function setSetupMode(mode) {
+  const isQuiz = mode === 'quiz';
+  setupTitle.textContent = isQuiz ? 'Quiz-Setup' : 'DokuTool-Einstellungen';
+  setupSubtitle.textContent = isQuiz
+    ? 'Navigation und Firestore-Struktur.'
+    : 'Steuere, welche Bereiche im DokuTool angezeigt werden.';
+  setupButton.title = isQuiz ? 'Quiz-Setup' : 'DokuTool-Einstellungen';
+  setupButton.setAttribute('aria-label', `${setupButton.title} öffnen`);
+  quizSettingsContent.classList.toggle('hidden', !isQuiz);
+  dokuSettingsContent.classList.toggle('hidden', isQuiz);
+  dokuSettingsStatus.textContent = '';
+  quizSettingsStatus.textContent = '';
+}
+
+function dokuSettingsKey() {
+  return `ihk-dokutool-settings:${currentUser?.id || 'guest'}`;
+}
+
+function loadDokuSettings() {
+  try {
+    dokuSettings = {
+      history: true,
+      chat: true,
+      ...JSON.parse(localStorage.getItem(dokuSettingsKey()) || '{}')
+    };
+  } catch {
+    dokuSettings = { history: true, chat: true };
+  }
+
+  showHistoryToggle.checked = dokuSettings.history;
+  showChatToggle.checked = dokuSettings.chat;
+  applyDokuSettings();
+}
+
+function saveDokuSettings() {
+  localStorage.setItem(dokuSettingsKey(), JSON.stringify(dokuSettings));
+}
+
+function applyDokuSettings() {
+  const config = [
+    { enabled: dokuSettings.history, tab: historyTabButton, panel: panels.history },
+    { enabled: dokuSettings.chat, tab: chatTabButton, panel: panels.chat }
+  ];
+
+  config.forEach(({ enabled, tab, panel }) => {
+    tab.classList.toggle('hidden', !enabled);
+    panel.classList.toggle('hidden', !enabled);
+    if (!enabled && panel.classList.contains('visible')) {
+      selectDokuTab('checker');
+    }
+  });
+}
+
+function updateDokuSettings(nextSettings) {
+  dokuSettings = { ...dokuSettings, ...nextSettings };
+  saveDokuSettings();
+  applyDokuSettings();
+  dokuSettingsStatus.textContent = 'Einstellungen gespeichert.';
+}
+
+function selectDokuTab(tabName) {
+  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (!tab || tab.classList.contains('hidden')) return;
+
+  tabs.forEach((item) => item.classList.remove('active'));
+  tab.classList.add('active');
+  Object.values(panels).forEach((panel) => panel.classList.remove('visible'));
+  panels[tabName].classList.add('visible');
+  if (tabName === 'history') loadHistory();
+}
+
+function quizSettingsKey() {
+  return `ihk-quiztool-settings:${currentUser?.id || 'guest'}`;
+}
+
+function loadQuizSettings() {
+  try {
+    quizSettings = {
+      dashboard: true,
+      pool: true,
+      history: true,
+      chat: true,
+      ...JSON.parse(localStorage.getItem(quizSettingsKey()) || '{}')
+    };
+  } catch {
+    quizSettings = { dashboard: true, pool: true, history: true, chat: true };
+  }
+
+  if (!Object.values(quizSettings).some(Boolean)) {
+    quizSettings.dashboard = true;
+  }
+
+  showQuizDashboardToggle.checked = quizSettings.dashboard;
+  showQuizPoolToggle.checked = quizSettings.pool;
+  showQuizHistoryToggle.checked = quizSettings.history;
+  showQuizChatToggle.checked = quizSettings.chat;
+  applyQuizSettings();
+}
+
+function saveQuizSettings() {
+  localStorage.setItem(quizSettingsKey(), JSON.stringify(quizSettings));
+}
+
+function applyQuizSettings() {
+  const config = [
+    { enabled: quizSettings.dashboard, tab: quizDashboardTabButton, card: quizDashboardCard },
+    { enabled: quizSettings.pool, tab: quizPoolTabButton, card: quizPoolCard },
+    { enabled: quizSettings.history, tab: quizHistoryTabButton, card: quizHistoryCard },
+    { enabled: quizSettings.chat, tab: quizChatTabButton, card: quizChatCard }
+  ];
+
+  config.forEach(({ enabled, tab, card }) => {
+    tab.classList.toggle('hidden', !enabled);
+    card.classList.toggle('hidden', !enabled);
+  });
+
+  const activeTarget = quizNavButtons.find((button) => button.classList.contains('active'))?.dataset.quizTarget;
+  const activeIsHidden = activeTarget && document.getElementById(activeTarget)?.classList.contains('hidden');
+  if (!activeTarget || activeIsHidden) {
+    activateQuizNav(firstVisibleQuizTarget(), false);
+  }
+}
+
+function updateQuizSettings(nextSettings) {
+  const next = { ...quizSettings, ...nextSettings };
+  if (!Object.values(next).some(Boolean)) {
+    quizSettingsStatus.textContent = 'Mindestens ein Quiz-Bereich muss sichtbar bleiben.';
+    showQuizDashboardToggle.checked = quizSettings.dashboard;
+    showQuizPoolToggle.checked = quizSettings.pool;
+    showQuizHistoryToggle.checked = quizSettings.history;
+    showQuizChatToggle.checked = quizSettings.chat;
+    return;
+  }
+
+  quizSettings = next;
+  saveQuizSettings();
+  applyQuizSettings();
+  quizSettingsStatus.textContent = 'Einstellungen gespeichert.';
+}
+
+function firstVisibleQuizTarget() {
+  if (quizSettings.dashboard) return 'quizDashboardCard';
+  if (quizSettings.pool) return 'quizPoolCard';
+  if (quizSettings.history) return 'quizHistoryCard';
+  return 'quizChatCard';
+}
+
 tabs.forEach((tab) => {
   tab.addEventListener('click', () => {
-    tabs.forEach((t) => t.classList.remove('active'));
-    tab.classList.add('active');
-    Object.values(panels).forEach((panel) => panel.classList.remove('visible'));
-    panels[tab.dataset.tab].classList.add('visible');
-    if (tab.dataset.tab === 'history') loadHistory();
+    selectDokuTab(tab.dataset.tab);
+  });
+});
+
+function activateQuizNav(targetId, shouldScroll = true) {
+  quizNavButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.quizTarget === targetId);
+  });
+
+  if (!shouldScroll) return;
+  document.getElementById(targetId)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start'
+  });
+}
+
+quizNavButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    activateQuizNav(button.dataset.quizTarget);
   });
 });
 
@@ -276,9 +478,38 @@ setupButton.addEventListener('click', () => {
   profileDropdown.classList.add('hidden');
 });
 
+showHistoryToggle.addEventListener('change', () => {
+  updateDokuSettings({ history: showHistoryToggle.checked });
+  if (showHistoryToggle.checked) loadHistory();
+});
+
+showChatToggle.addEventListener('change', () => {
+  updateDokuSettings({ chat: showChatToggle.checked });
+  if (showChatToggle.checked) loadChatHistory();
+});
+
+showQuizDashboardToggle.addEventListener('change', () => {
+  updateQuizSettings({ dashboard: showQuizDashboardToggle.checked });
+});
+
+showQuizPoolToggle.addEventListener('change', () => {
+  updateQuizSettings({ pool: showQuizPoolToggle.checked });
+});
+
+showQuizHistoryToggle.addEventListener('change', () => {
+  updateQuizSettings({ history: showQuizHistoryToggle.checked });
+});
+
+showQuizChatToggle.addEventListener('change', () => {
+  updateQuizSettings({ chat: showQuizChatToggle.checked });
+});
+
 profileButton.addEventListener('click', () => {
   profileDropdown.classList.toggle('hidden');
   setupDropdown.classList.add('hidden');
+  if (!profileDropdown.classList.contains('hidden') && !quizConfig) {
+    loadQuizTool();
+  }
 });
 
 saveProfileButton.addEventListener('click', async () => {
@@ -336,10 +567,6 @@ openQuizToolButton.addEventListener('click', () => {
   showQuizTool();
 });
 
-openDokuFromQuizButton.addEventListener('click', () => {
-  showDokuTool();
-});
-
 backToWorkspaceButton.addEventListener('click', () => {
   showWorkspace();
 });
@@ -382,6 +609,12 @@ loadQuizQuestionsButton.addEventListener('click', async () => {
   try {
     const data = await apiFetch(`/api/quiz/questions?${params.toString()}`);
     renderQuestionPreview(data.questions || []);
+    recordQuizHistory({
+      poolId,
+      poolName: selectedQuizPool()?.label || selectedQuizPool()?.name || poolId,
+      topic: quizTopicSelect.value,
+      count: data.questions?.length || 0
+    });
     quizPoolStatus.textContent = `${data.questions?.length || 0} Fragen geladen.`;
   } catch (error) {
     quizPoolStatus.textContent = error.message;
@@ -591,6 +824,56 @@ function renderQuestionPreview(questions) {
       ${solution ? `<p>${escapeHtml(solution)}</p>` : ''}
     `;
     quizQuestionPreview.appendChild(article);
+  }
+}
+
+function quizHistoryKey() {
+  return `ihk-quiztool-load-history:${currentUser?.id || 'guest'}`;
+}
+
+function saveQuizHistory() {
+  localStorage.setItem(quizHistoryKey(), JSON.stringify(quizHistory.slice(0, 20)));
+}
+
+function loadQuizHistory() {
+  try {
+    quizHistory = JSON.parse(localStorage.getItem(quizHistoryKey()) || '[]');
+  } catch {
+    quizHistory = [];
+  }
+  renderQuizHistory();
+}
+
+function recordQuizHistory(entry) {
+  quizHistory = [
+    {
+      ...entry,
+      createdAt: new Date().toISOString()
+    },
+    ...quizHistory
+  ].slice(0, 20);
+  saveQuizHistory();
+  renderQuizHistory();
+}
+
+function renderQuizHistory() {
+  quizHistoryList.innerHTML = '';
+  if (!quizHistory.length) {
+    quizHistoryList.innerHTML = '<p class="empty-note">Noch keine Fragen geladen.</p>';
+    return;
+  }
+
+  for (const entry of quizHistory) {
+    const article = document.createElement('article');
+    article.className = 'question-preview-item';
+    article.innerHTML = `
+      <div>
+        <strong>${escapeHtml(entry.poolName || entry.poolId || 'Fragenpool')}</strong>
+        <small>${escapeHtml(formatDate(entry.createdAt))}</small>
+      </div>
+      <p>${escapeHtml(entry.topic || 'Alle Topics')} · ${escapeHtml(String(entry.count || 0))} Fragen</p>
+    `;
+    quizHistoryList.appendChild(article);
   }
 }
 
@@ -895,6 +1178,107 @@ clearButton.addEventListener('click', () => {
   saveHistory();
   messages.innerHTML = '';
   addMessage('assistant', 'Chat wurde geleert. Wie kann ich helfen?');
+});
+
+function quizChatHistoryKey() {
+  return `ihk-quiztool-chat-history:${currentUser?.id || 'guest'}`;
+}
+
+function saveQuizChatHistory() {
+  localStorage.setItem(quizChatHistoryKey(), JSON.stringify(quizChatHistory.slice(-20)));
+}
+
+function loadQuizChatHistory() {
+  try {
+    quizChatHistory = JSON.parse(localStorage.getItem(quizChatHistoryKey()) || '[]');
+  } catch {
+    quizChatHistory = [];
+  }
+  renderSavedQuizChatHistory();
+}
+
+function addQuizMessage(role, content) {
+  const article = document.createElement('article');
+  article.className = `message ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = content;
+
+  article.appendChild(bubble);
+  quizMessages.appendChild(article);
+  quizMessages.scrollTop = quizMessages.scrollHeight;
+}
+
+function renderSavedQuizChatHistory() {
+  quizMessages.innerHTML = '';
+  addQuizMessage('assistant', 'Hallo Florian, ich bin dein Quiz-Assistent. Frag mich zu IHK-Themen, Fragenpools oder Lernzielen.');
+  for (const entry of quizChatHistory) {
+    addQuizMessage(entry.role, entry.content);
+  }
+}
+
+function setQuizChatLoading(isLoading) {
+  quizSendButton.disabled = isLoading;
+  quizMessageInput.disabled = isLoading;
+  quizChatStatus.textContent = isLoading ? 'Antwort wird erzeugt ...' : 'Bereit';
+}
+
+quizChatForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const message = quizMessageInput.value.trim();
+  if (!message) return;
+
+  const previousHistory = quizChatHistory.slice(-10);
+  const pool = selectedQuizPool();
+  const context = [
+    'Kontext: IHK QuizTool und Pruefungsvorbereitung.',
+    pool ? `Aktiver Fragenpool: ${pool.label || pool.id}.` : '',
+    quizTopicSelect.value ? `Aktives Topic: ${quizTopicSelect.value}.` : ''
+  ].filter(Boolean).join('\n');
+
+  addQuizMessage('user', message);
+  quizChatHistory.push({ role: 'user', content: message });
+  saveQuizChatHistory();
+
+  quizMessageInput.value = '';
+  setQuizChatLoading(true);
+
+  try {
+    const data = await apiFetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        mode: 'unterricht',
+        context,
+        history: previousHistory
+      })
+    });
+
+    addQuizMessage('assistant', data.answer);
+    quizChatHistory.push({ role: 'assistant', content: data.answer });
+    saveQuizChatHistory();
+  } catch (error) {
+    addQuizMessage('assistant', `Fehler: ${error.message}`);
+  } finally {
+    setQuizChatLoading(false);
+    quizMessageInput.focus();
+  }
+});
+
+quizClearButton.addEventListener('click', () => {
+  quizChatHistory = [];
+  saveQuizChatHistory();
+  quizMessages.innerHTML = '';
+  addQuizMessage('assistant', 'Chat wurde geleert. Womit starten wir?');
+});
+
+quizMessageInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    quizChatForm.requestSubmit();
+  }
 });
 
 input.addEventListener('keydown', (event) => {

@@ -39,7 +39,7 @@
   </section>
 
   <div id="setupWidget" class="setup-widget hidden">
-    <button id="setupButton" class="setup-button icon-button" type="button" title="Quiz-Setup" aria-label="Quiz-Setup öffnen">
+    <button id="setupButton" class="setup-button icon-button" type="button" title="Einstellungen" aria-label="Einstellungen öffnen">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
         <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05A1.7 1.7 0 0 0 15 19.38a1.7 1.7 0 0 0-1 .58V20a2 2 0 0 1-4 0v-.04a1.7 1.7 0 0 0-1-.58 1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 0 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.62 15a1.7 1.7 0 0 0-.58-1H4a2 2 0 0 1 0-4h.04a1.7 1.7 0 0 0 .58-1 1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 0 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 9 4.62a1.7 1.7 0 0 0 1-.58V4a2 2 0 0 1 4 0v.04a1.7 1.7 0 0 0 1 .58 1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 0 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.38 9c.1.37.3.7.58 1H20a2 2 0 0 1 0 4h-.04c-.28.3-.48.63-.58 1Z" />
@@ -48,39 +48,71 @@
 
     <section id="setupDropdown" class="setup-dropdown hidden">
       <header>
-        <h2>Quiz-Setup</h2>
-        <p>Profil, Rollen und Firestore-Struktur.</p>
+        <h2 id="setupTitle">Einstellungen</h2>
+        <p id="setupSubtitle">Passe die aktuelle Ansicht an.</p>
       </header>
 
-      <section class="setup-block">
-        <h3>Quiz-Profil</h3>
-        <label>
-          Vorname
-          <input id="quizFirstNameInput" autocomplete="given-name" />
-        </label>
-        <label>
-          Nachname
-          <input id="quizLastNameInput" autocomplete="family-name" />
-        </label>
-        <label>
-          Fachrichtung
-          <select id="quizFachSelect"></select>
-        </label>
-        <p id="quizFachInfo" class="status-line"></p>
-        <button id="saveQuizProfileButton" type="button">Quiz-Profil speichern</button>
-        <p id="quizProfileStatus" class="status-line"></p>
-      </section>
+      <div id="dokuSettingsContent" class="setup-content hidden">
+        <section class="setup-block">
+          <h3>DokuTool-Navigation</h3>
+          <label class="setting-toggle">
+            <input id="showHistoryToggle" type="checkbox" checked />
+            <span>
+              <strong>History anzeigen</strong>
+              <small>Blendet den History-Bereich in der linken Navigation ein oder aus.</small>
+            </span>
+          </label>
+          <label class="setting-toggle">
+            <input id="showChatToggle" type="checkbox" checked />
+            <span>
+              <strong>KI-Chat anzeigen</strong>
+              <small>Blendet den KI-Chat in der linken Navigation ein oder aus.</small>
+            </span>
+          </label>
+          <p id="dokuSettingsStatus" class="status-line"></p>
+        </section>
+      </div>
 
-      <section class="setup-block">
-        <h3>Rollen & Rechte</h3>
-        <div id="quizRolesList" class="role-list"></div>
-      </section>
+      <div id="quizSettingsContent" class="setup-content">
+        <section class="setup-block">
+          <h3>QuizTool-Navigation</h3>
+          <label class="setting-toggle">
+            <input id="showQuizDashboardToggle" type="checkbox" checked />
+            <span>
+              <strong>Quiz-Dashboard anzeigen</strong>
+              <small>Blendet das Dashboard in der linken Navigation und im Quizbereich ein oder aus.</small>
+            </span>
+          </label>
+          <label class="setting-toggle">
+            <input id="showQuizPoolToggle" type="checkbox" checked />
+            <span>
+              <strong>Fragenpool anzeigen</strong>
+              <small>Blendet den Fragenpool in der linken Navigation und im Quizbereich ein oder aus.</small>
+            </span>
+          </label>
+          <label class="setting-toggle">
+            <input id="showQuizHistoryToggle" type="checkbox" checked />
+            <span>
+              <strong>History anzeigen</strong>
+              <small>Blendet die Quiz-History in der linken Navigation und im Quizbereich ein oder aus.</small>
+            </span>
+          </label>
+          <label class="setting-toggle">
+            <input id="showQuizChatToggle" type="checkbox" checked />
+            <span>
+              <strong>KI-Chat anzeigen</strong>
+              <small>Blendet den Quiz-KI-Chat in der linken Navigation und im Quizbereich ein oder aus.</small>
+            </span>
+          </label>
+          <p id="quizSettingsStatus" class="status-line"></p>
+        </section>
 
-      <section class="setup-block">
-        <h3>Fragenpool-Struktur</h3>
-        <p>Firestore-Abfrage aus IHK_APP: Fragen werden pro Pool und Topic sortiert geladen.</p>
-        <div id="quizQuestionFields" class="schema-list"></div>
-      </section>
+        <section class="setup-block">
+          <h3>Fragenpool-Struktur</h3>
+          <p>Firestore-Abfrage aus IHK_APP: Fragen werden pro Pool und Topic sortiert geladen.</p>
+          <div id="quizQuestionFields" class="schema-list"></div>
+        </section>
+      </div>
     </section>
   </div>
 
@@ -110,6 +142,31 @@
       </div>
 
       <p id="profileStatus" class="status-line"></p>
+
+      <section class="setup-block profile-quiz-block">
+        <h3>Quiz-Profil</h3>
+        <label>
+          Vorname
+          <input id="quizFirstNameInput" autocomplete="given-name" />
+        </label>
+        <label>
+          Nachname
+          <input id="quizLastNameInput" autocomplete="family-name" />
+        </label>
+        <label>
+          Fachrichtung
+          <select id="quizFachSelect"></select>
+        </label>
+        <p id="quizFachInfo" class="status-line"></p>
+        <button id="saveQuizProfileButton" type="button">Quiz-Profil speichern</button>
+        <p id="quizProfileStatus" class="status-line"></p>
+      </section>
+
+      <section class="setup-block profile-quiz-block">
+        <h3>Rollen & Rechte</h3>
+        <div id="quizRolesList" class="role-list"></div>
+      </section>
+
       <button id="logoutButton" class="secondary" type="button">Abmelden</button>
     </section>
   </div>
@@ -122,7 +179,6 @@
           <h1>Arbeitsbereich</h1>
           <p id="workspaceGreeting">Willkommen</p>
         </div>
-        <img class="workspace-product-mark" src="assets/dokutool-logo.svg" alt="" />
       </header>
 
       <div class="tool-grid" aria-label="Tool-Auswahl">
@@ -149,9 +205,36 @@
     </div>
   </section>
 
-  <section id="quizView" class="quiz-view hidden">
-    <div class="workspace-shell">
-      <header class="workspace-header quiz-hero">
+  <section id="quizView" class="app-shell quiz-shell hidden">
+    <aside class="sidebar quiz-sidebar">
+      <div class="brand">
+        <img class="brand-logo quiz-brand-logo" src="assets/quiz-logo.png" alt="IHK QuizTool" />
+        <div>
+          <h1>IHK QuizTool</h1>
+          <p>Pruefungsvorbereitung und Fragenpool</p>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="Quiz-Bereiche">
+        <button id="backToWorkspaceButton" class="tab workspace-tab" type="button">Tool-Auswahl</button>
+        <button id="quizDashboardTabButton" class="tab active" data-quiz-target="quizDashboardCard" type="button">Quiz-Dashboard</button>
+        <button id="quizPoolTabButton" class="tab" data-quiz-target="quizPoolCard" type="button">Fragenpool</button>
+        <button id="quizHistoryTabButton" class="tab" data-quiz-target="quizHistoryCard" type="button">History</button>
+        <button id="quizChatTabButton" class="tab" data-quiz-target="quizChatCard" type="button">KI-Chat</button>
+      </nav>
+
+      <section class="hint">
+        <strong>Quizmodus:</strong>
+        Lade Fragenpools aus Firestore, waehle Topic und Umfang und pruefe den Fragenbestand direkt im Tool.
+      </section>
+
+      <section class="hint soft">
+        Quiz-Profil und Rollen findest du im Profil-Menü, Struktur und Ansicht im Setup-Bereich.
+      </section>
+    </aside>
+
+    <section class="panel visible quiz-panel">
+      <header class="panel-header quiz-hero">
         <img class="quiz-hero-pattern" src="assets/quiz-pattern.png" alt="" />
         <div>
           <img class="header-product-logo quiz-product-logo" src="assets/quiz-logo-tight.png" alt="IHK QuizTool" />
@@ -160,13 +243,8 @@
         </div>
       </header>
 
-      <div class="quiz-toolbar">
-        <button id="backToWorkspaceButton" class="secondary" type="button">Zurück</button>
-        <button id="openDokuFromQuizButton" type="button">DokuTool öffnen</button>
-      </div>
-
       <section class="quiz-grid">
-        <article class="quiz-card quiz-card-wide">
+        <article id="quizDashboardCard" class="quiz-card quiz-card-wide">
           <span class="eyebrow">Aus IHK_APP übernommen</span>
           <h2>Quiz-Dashboard</h2>
           <p>Die Expo-App-Struktur ist als Web-Bereich vorbereitet: Profil, Fachrichtung, Rollenmodell und Firestore-Fragenpool.</p>
@@ -176,7 +254,7 @@
           </div>
         </article>
 
-        <article class="quiz-card quiz-card-wide quiz-pool-card">
+        <article id="quizPoolCard" class="quiz-card quiz-card-wide quiz-pool-card">
           <span class="eyebrow">Firestore-Fragen</span>
           <h2>Fragenpool auswählen</h2>
           <p>Sobald Firestore verbunden ist, erscheinen hier die Pools aus <strong>fragenpools</strong>. Danach kannst du Topic und Anzahl eingrenzen und die Fragen laden.</p>
@@ -205,8 +283,27 @@
           <p id="quizPoolStatus" class="status-line"></p>
           <div id="quizQuestionPreview" class="question-preview"></div>
         </article>
+
+        <article id="quizHistoryCard" class="quiz-card quiz-card-wide">
+          <span class="eyebrow">Quiz-History</span>
+          <h2>Geladene Fragenpools</h2>
+          <p>Hier werden die zuletzt geladenen Fragenpools und Topics fuer deine Quiz-Auswertung gesammelt.</p>
+          <div id="quizHistoryList" class="quiz-history-list"></div>
+        </article>
+
+        <article id="quizChatCard" class="quiz-card quiz-card-wide quiz-chat-card">
+          <span class="eyebrow">KI-Chat</span>
+          <h2>Quiz-Assistent</h2>
+          <p id="quizChatStatus">Bereit</p>
+          <div id="quizMessages" class="messages quiz-messages"></div>
+          <form id="quizChatForm" class="composer">
+            <textarea id="quizMessageInput" rows="3" placeholder="Frage etwas zu den Quizthemen ..." required></textarea>
+            <button id="quizSendButton" type="submit">Senden</button>
+          </form>
+          <button id="quizClearButton" class="secondary" type="button">Chat leeren</button>
+        </article>
       </section>
-    </div>
+    </section>
   </section>
 
   <main id="appShell" class="app-shell hidden">
@@ -222,8 +319,8 @@
       <nav class="tabs" aria-label="Bereiche">
         <button id="backToWorkspaceFromDokuButton" class="tab workspace-tab" type="button">Tool-Auswahl</button>
         <button class="tab active" data-tab="checker">Doku-Prüfung</button>
-        <button class="tab" data-tab="history">History</button>
-        <button class="tab" data-tab="chat">KI-Chat</button>
+        <button id="historyTabButton" class="tab" data-tab="history">History</button>
+        <button id="chatTabButton" class="tab" data-tab="chat">KI-Chat</button>
       </nav>
 
       <section class="hint">
