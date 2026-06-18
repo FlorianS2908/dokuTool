@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 const USERS_COLLECTION = 'users';
+const SESSIONS_COLLECTION = 'sessions';
 
 function now() {
   return new Date().toISOString();
@@ -46,6 +47,10 @@ function compactReportEntry(entry) {
   };
 }
 
+function isExpired(expiresAt) {
+  return !expiresAt || Date.now() > new Date(expiresAt).getTime();
+}
+
 export function toPublicUser(user) {
   return withoutPassword(user);
 }
@@ -63,11 +68,12 @@ class LocalJsonStore {
       const data = JSON.parse(stripJsonBom(raw));
       return {
         users: Array.isArray(data.users) ? data.users : [],
-        reports: Array.isArray(data.reports) ? data.reports : []
+        reports: Array.isArray(data.reports) ? data.reports : [],
+        sessions: Array.isArray(data.sessions) ? data.sessions : []
       };
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
-      return { users: [], reports: [] };
+      return { users: [], reports: [], sessions: [] };
     }
   }
 
@@ -148,6 +154,50 @@ class LocalJsonStore {
     const entry = data.reports.find((item) => item.userId === userId && item.id === reportId);
     return entry || null;
   }
+
+  async createSession(session) {
+    const data = await this.read();
+    data.sessions = data.sessions
+      .filter((entry) => !isExpired(entry.expiresAt) && entry.id !== session.id);
+    const storedSession = {
+      ...session,
+      createdAt: session.createdAt || now(),
+      lastSeenAt: session.lastSeenAt || now()
+    };
+    data.sessions.push(storedSession);
+    await this.write(data);
+    return storedSession;
+  }
+
+  async getSession(sessionId) {
+    const data = await this.read();
+    const session = data.sessions.find((entry) => entry.id === sessionId) || null;
+    if (!session) return null;
+    if (!isExpired(session.expiresAt)) return session;
+
+    data.sessions = data.sessions.filter((entry) => entry.id !== sessionId);
+    await this.write(data);
+    return null;
+  }
+
+  async touchSession(sessionId) {
+    const data = await this.read();
+    const index = data.sessions.findIndex((entry) => entry.id === sessionId);
+    if (index === -1 || isExpired(data.sessions[index].expiresAt)) return null;
+
+    data.sessions[index] = {
+      ...data.sessions[index],
+      lastSeenAt: now()
+    };
+    await this.write(data);
+    return data.sessions[index];
+  }
+
+  async deleteSession(sessionId) {
+    const data = await this.read();
+    data.sessions = data.sessions.filter((entry) => entry.id !== sessionId);
+    await this.write(data);
+  }
 }
 
 class FirestoreStore {
@@ -162,6 +212,10 @@ class FirestoreStore {
 
   reports(userId) {
     return this.users().doc(userId).collection('reports');
+  }
+
+  sessions() {
+    return this.db.collection(SESSIONS_COLLECTION);
   }
 
   docToUser(doc) {
@@ -230,6 +284,37 @@ class FirestoreStore {
   async getReport(userId, reportId) {
     const doc = await this.reports(userId).doc(reportId).get();
     return doc.exists ? { id: doc.id, ...doc.data() } : null;
+  }
+
+  async createSession(session) {
+    const storedSession = {
+      ...session,
+      createdAt: session.createdAt || now(),
+      lastSeenAt: session.lastSeenAt || now()
+    };
+    await this.sessions().doc(session.id).set(storedSession);
+    return storedSession;
+  }
+
+  async getSession(sessionId) {
+    const doc = await this.sessions().doc(sessionId).get();
+    if (!doc.exists) return null;
+    const session = { id: doc.id, ...doc.data() };
+    if (!isExpired(session.expiresAt)) return session;
+
+    await this.deleteSession(sessionId);
+    return null;
+  }
+
+  async touchSession(sessionId) {
+    const session = await this.getSession(sessionId);
+    if (!session) return null;
+    await this.sessions().doc(sessionId).set({ lastSeenAt: now() }, { merge: true });
+    return { ...session, lastSeenAt: now() };
+  }
+
+  async deleteSession(sessionId) {
+    await this.sessions().doc(sessionId).delete();
   }
 }
 

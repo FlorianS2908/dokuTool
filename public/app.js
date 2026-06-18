@@ -6,10 +6,19 @@ const timerQuizView = document.querySelector('#timerQuizView');
 const workspaceGreeting = document.querySelector('#workspaceGreeting');
 const openDokuToolButton = document.querySelector('#openDokuToolButton');
 const openQuizToolButton = document.querySelector('#openQuizToolButton');
-const openTimerQuizButton = document.querySelector('#openTimerQuizButton');
+const openSoftwareQuizButton = document.querySelector('#openSoftwareQuizButton');
+const openSqlQuizButton = document.querySelector('#openSqlQuizButton');
+const openPythonQuizButton = document.querySelector('#openPythonQuizButton');
 const backToWorkspaceButton = document.querySelector('#backToWorkspaceButton');
 const backToWorkspaceFromDokuButton = document.querySelector('#backToWorkspaceFromDokuButton');
 const backToWorkspaceFromTimerButton = document.querySelector('#backToWorkspaceFromTimerButton');
+const workspaceTrackButtons = document.querySelectorAll('[data-workspace-track]');
+const workspaceTrackPanels = document.querySelectorAll('[data-workspace-panel]');
+const timerQuizRoot = document.querySelector('#timerQuizRoot');
+const timerQuizViewTitle = document.querySelector('#timerQuizViewTitle');
+const timerQuizViewSubtitle = document.querySelector('#timerQuizViewSubtitle');
+const timerQuizHintTitle = document.querySelector('#timerQuizHintTitle');
+const timerQuizHintText = document.querySelector('#timerQuizHintText');
 const quizStatus = document.querySelector('#quizStatus');
 const quizFirestorePath = document.querySelector('#quizFirestorePath');
 const quizFirstNameInput = document.querySelector('#quizFirstNameInput');
@@ -126,6 +135,28 @@ let quizConfig = null;
 let ihkProfilesLoaded = false;
 let dokuSettings = { history: true, chat: true };
 let quizSettings = { dashboard: true, pool: true, history: true, chat: true };
+let activeWorkspaceTrack = 'fiae';
+const workspaceTracks = new Set(['fiae', 'fisi', 'kits', 'kabue']);
+const timerQuizAreas = {
+  software: {
+    title: 'Software Entwicklung Allgemein',
+    subtitle: 'Grundlagen, Prozesse und allgemeine Fragen',
+    hintTitle: 'Allgemein:',
+    hintText: 'Trainiere Softwareprozess, Datenanalyse, Projektmanagement und Entwicklungsgrundlagen.'
+  },
+  sql: {
+    title: 'SQL',
+    subtitle: 'SELECT, Datenbanken und Reihenfolgeaufgaben',
+    hintTitle: 'SQL:',
+    hintText: 'Trainiere SQL-Fragen und Drag-and-Drop-Aufgaben zu SELECT-Abfragen.'
+  },
+  python: {
+    title: 'Python',
+    subtitle: 'Codefragen und JSON-Fragenpools',
+    hintTitle: 'Python:',
+    hintText: 'Lade Python-Fragenpools als JSON. Python-Code wird im Quiz formatiert angezeigt.'
+  }
+};
 
 function statusLabel(status) {
   return {
@@ -200,6 +231,32 @@ function renderUser(user) {
   }
 }
 
+function setWorkspaceTrack(track) {
+  activeWorkspaceTrack = workspaceTracks.has(track) ? track : 'fiae';
+
+  workspaceTrackButtons.forEach((button) => {
+    const isActive = button.dataset.workspaceTrack === activeWorkspaceTrack;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
+  });
+
+  workspaceTrackPanels.forEach((panel) => {
+    panel.classList.toggle('visible', panel.dataset.workspacePanel === activeWorkspaceTrack);
+  });
+}
+
+function setTimerQuizArea(area) {
+  const key = timerQuizAreas[area] ? area : 'software';
+  const config = timerQuizAreas[key];
+
+  timerQuizRoot.dataset.timerQuizArea = key;
+  timerQuizViewTitle.textContent = config.title;
+  timerQuizViewSubtitle.textContent = config.subtitle;
+  timerQuizHintTitle.textContent = config.hintTitle;
+  timerQuizHintText.textContent = config.hintText;
+  window.dispatchEvent(new CustomEvent('timer-quiz-area-change', { detail: { area: key } }));
+}
+
 function showAuth(message = '') {
   currentUser = null;
   authView.classList.remove('hidden');
@@ -216,6 +273,7 @@ function showAuth(message = '') {
 
 function showWorkspace(user = currentUser) {
   if (user) renderUser(user);
+  setWorkspaceTrack(activeWorkspaceTrack);
   workspaceGreeting.textContent = currentUser?.displayName
     ? `Willkommen, ${currentUser.displayName}`
     : 'Willkommen';
@@ -266,7 +324,8 @@ function showQuizTool() {
   loadQuizTool();
 }
 
-function showTimerQuizTool() {
+function showTimerQuizTool(area = 'software') {
+  setTimerQuizArea(area);
   authView.classList.add('hidden');
   workspaceView.classList.add('hidden');
   appShell.classList.add('hidden');
@@ -586,8 +645,22 @@ openQuizToolButton.addEventListener('click', () => {
   showQuizTool();
 });
 
-openTimerQuizButton.addEventListener('click', () => {
-  showTimerQuizTool();
+openSoftwareQuizButton.addEventListener('click', () => {
+  showTimerQuizTool('software');
+});
+
+openSqlQuizButton.addEventListener('click', () => {
+  showTimerQuizTool('sql');
+});
+
+openPythonQuizButton.addEventListener('click', () => {
+  showTimerQuizTool('python');
+});
+
+workspaceTrackButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    setWorkspaceTrack(button.dataset.workspaceTrack);
+  });
 });
 
 backToWorkspaceButton.addEventListener('click', () => {

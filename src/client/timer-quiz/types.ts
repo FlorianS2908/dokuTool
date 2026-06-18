@@ -35,6 +35,7 @@ export type QuizPool = {
   id?: string;
   name?: string;
   description?: string;
+  area?: 'software' | 'sql' | 'python';
   durationMinutes?: number;
   timeLimitMinutes?: number;
   questions: QuizQuestion[];

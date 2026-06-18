@@ -181,37 +181,107 @@
         </div>
       </header>
 
-      <div class="tool-grid" aria-label="Tool-Auswahl">
-        <button id="openDokuToolButton" class="tool-tile" type="button">
-          <span class="tool-visual">
-            <img src="assets/dokutool-logo.svg" alt="" />
-          </span>
-          <span class="tool-copy">
-            <strong>DokuTool</strong>
-            <small>Dokumentation</small>
-          </span>
-        </button>
+      <nav class="workspace-track-tabs" aria-label="Fachrichtung">
+        <button class="workspace-track-tab active" type="button" data-workspace-track="fiae" aria-pressed="true">FIAE</button>
+        <button class="workspace-track-tab" type="button" data-workspace-track="fisi" aria-pressed="false">FISI</button>
+        <button class="workspace-track-tab" type="button" data-workspace-track="kits" aria-pressed="false">Kits</button>
+        <button class="workspace-track-tab" type="button" data-workspace-track="kabue" aria-pressed="false">KAB&Uuml;</button>
+      </nav>
 
-        <button id="openQuizToolButton" class="tool-tile" type="button">
-          <span class="tool-visual">
-            <img src="assets/quiz-logo.png" alt="" />
-          </span>
-          <span class="tool-copy">
-            <strong>QuizTool</strong>
-            <small>IHK Training</small>
-          </span>
-        </button>
+      <section id="workspaceFiaePanel" class="workspace-track-panel visible" data-workspace-panel="fiae">
+        <div class="workspace-track-heading">
+          <span class="eyebrow">FIAE</span>
+          <h2>Anwendungsentwicklung</h2>
+        </div>
 
-        <button id="openTimerQuizButton" class="tool-tile" type="button">
-          <span class="tool-visual timer-tool-visual">
-            <img src="assets/quiz-logo-tight.png" alt="" />
-          </span>
-          <span class="tool-copy">
-            <strong>TimerQuiz</strong>
-            <small>JSON & Code</small>
-          </span>
-        </button>
-      </div>
+        <div class="tool-grid" aria-label="FIAE Tool-Auswahl">
+          <button id="openDokuToolButton" class="tool-tile" type="button">
+            <span class="tool-visual">
+              <img src="assets/dokutool-logo.svg" alt="" />
+            </span>
+            <span class="tool-copy">
+              <strong>DokuTool</strong>
+              <small>Dokumentation</small>
+            </span>
+          </button>
+
+          <button id="openQuizToolButton" class="tool-tile" type="button">
+            <span class="tool-visual">
+              <img src="assets/quiz-logo.png" alt="" />
+            </span>
+            <span class="tool-copy">
+              <strong>QuizTool</strong>
+              <small>IHK Training</small>
+            </span>
+          </button>
+
+          <button id="openSoftwareQuizButton" class="tool-tile" type="button">
+            <span class="tool-visual timer-tool-visual">
+              <img src="assets/quiz-logo-tight.png" alt="" />
+            </span>
+            <span class="tool-copy">
+              <strong>Software Entwicklung Allgemein</strong>
+              <small>Grundlagen & Prozesse</small>
+            </span>
+          </button>
+
+          <button id="openSqlQuizButton" class="tool-tile" type="button">
+            <span class="tool-visual timer-tool-visual">
+              <img src="assets/quiz-logo-tight.png" alt="" />
+            </span>
+            <span class="tool-copy">
+              <strong>SQL</strong>
+              <small>SELECT & Datenbanken</small>
+            </span>
+          </button>
+
+          <button id="openPythonQuizButton" class="tool-tile" type="button">
+            <span class="tool-visual timer-tool-visual">
+              <img src="assets/quiz-logo-tight.png" alt="" />
+            </span>
+            <span class="tool-copy">
+              <strong>Python</strong>
+              <small>Codefragen & JSON</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section id="workspaceFisiPanel" class="workspace-track-panel" data-workspace-panel="fisi">
+        <div class="workspace-track-heading">
+          <span class="eyebrow">FISI</span>
+          <h2>Systemintegration</h2>
+        </div>
+
+        <article class="workspace-empty-state">
+          <strong>Noch keine FISI-Tools</strong>
+          <span>Dieser Arbeitsbereich ist vorbereitet.</span>
+        </article>
+      </section>
+
+      <section id="workspaceKitsPanel" class="workspace-track-panel" data-workspace-panel="kits">
+        <div class="workspace-track-heading">
+          <span class="eyebrow">Kits</span>
+          <h2>Kaufleute IT-System-Management</h2>
+        </div>
+
+        <article class="workspace-empty-state">
+          <strong>Noch keine Kits-Tools</strong>
+          <span>Dieser Arbeitsbereich ist vorbereitet.</span>
+        </article>
+      </section>
+
+      <section id="workspaceKabuePanel" class="workspace-track-panel" data-workspace-panel="kabue">
+        <div class="workspace-track-heading">
+          <span class="eyebrow">KAB&Uuml;</span>
+          <h2>Kaufleute f&uuml;r B&uuml;romanagement</h2>
+        </div>
+
+        <article class="workspace-empty-state">
+          <strong>Noch keine KAB&Uuml;-Tools</strong>
+          <span>Dieser Arbeitsbereich ist vorbereitet.</span>
+        </article>
+      </section>
     </div>
   </section>
 
@@ -321,8 +391,8 @@
       <div class="brand">
         <img class="brand-logo quiz-brand-logo" src="assets/quiz-logo-tight.png" alt="TimerQuiz" />
         <div>
-          <h1>TimerQuiz</h1>
-          <p>JSON-Fragenpool und Codefragen</p>
+          <h1 id="timerQuizViewTitle">Software Entwicklung Allgemein</h1>
+          <p id="timerQuizViewSubtitle">Grundlagen, Prozesse und Codefragen</p>
         </div>
       </div>
 
@@ -332,12 +402,12 @@
       </nav>
 
       <section class="hint">
-        <strong>JSON:</strong>
-        Lade eigene Fragenpools direkt im Tool. Fragen mit Python-Code werden formatiert dargestellt.
+        <strong id="timerQuizHintTitle">JSON:</strong>
+        <span id="timerQuizHintText">Lade eigene Fragenpools direkt im Tool. Fragen mit Code werden formatiert dargestellt.</span>
       </section>
 
       <section class="hint soft">
-        Der TimerQuiz laeuft als React/TypeScript-Modul und bleibt von der Firestore-Quizstruktur getrennt.
+        Die Trainingstools laufen als React/TypeScript-Modul und bleiben von der Firestore-Quizstruktur getrennt.
       </section>
     </aside>
 
@@ -349,7 +419,7 @@
   <main id="appShell" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand">
-        <img class="brand-logo" src="assets/dokutool-logo.svg" alt="IHK DokuTool" />
+        <img class="brand-logo quiz-brand-logo" src="assets/dokutool-logo.svg" alt="IHK DokuTool" />
         <div>
           <h1>IHK DokuTool</h1>
           <p>Projektantrag ↔ Dokumentation prüfen</p>
@@ -374,9 +444,10 @@
     </aside>
 
     <section id="checkerPanel" class="panel visible">
-      <header class="panel-header">
-        <div class="panel-title">
-          <img class="panel-logo" src="assets/dokutool-logo.svg" alt="" />
+      <header class="panel-header doku-hero">
+        <img class="doku-hero-pattern" src="assets/quiz-pattern.png" alt="" />
+        <div>
+          <img class="header-product-logo doku-product-logo" src="assets/dokutool-logo.svg" alt="IHK DokuTool" />
           <div>
             <h2>Doku-Prüfung</h2>
             <p id="analyzeStatus">Bereit</p>
@@ -477,9 +548,12 @@
 
     <section id="historyPanel" class="panel history-panel">
       <header class="panel-header">
-        <div>
+        <div class="panel-title">
+          <img class="panel-logo" src="assets/dokutool-logo.svg" alt="" />
+          <div>
           <h2>History</h2>
           <p id="historyStatus">Noch keine gespeicherten Berichte geladen.</p>
+          </div>
         </div>
       </header>
 

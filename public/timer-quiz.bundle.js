@@ -21731,6 +21731,7 @@ var import_react = __toESM(require_react(), 1);
 var defaultTimerQuizPools = [
   {
     "id": "software_daten_grundlagentest_25",
+    "area": "software",
     "name": "Software und Daten \xB7 Grundlagentest \xB7 25 Fragen",
     "description": "25 pr\xFCfungsnahe Fragen zu Datenanalyse, Datenqualit\xE4t, Datenobjekten, Attributen, Importpr\xFCfung, Softwarelebenszyklus, Prozessphasen, Projektmanagement, PDCA, Vorgehensmodellen, Programmiersprachen, Frameworks und Werkzeugen. Zeitlimit: 25 Minuten.",
     "durationMinutes": 25,
@@ -22153,6 +22154,7 @@ var defaultTimerQuizPools = [
   },
   {
     "id": "software_daten_kurztest_15",
+    "area": "software",
     "name": "Software und Daten \xB7 Kurztest \xB7 15 Fragen",
     "description": "15 Fragen zur Wiederholung von Softwareprozess, Datenanalyse, Design, Test, Projektmanagement, Vorgehensmodellen, Programmiersprachen und Werkzeugen. Zeitlimit: 20 Minuten.",
     "durationMinutes": 20,
@@ -22421,6 +22423,7 @@ var defaultTimerQuizPools = [
   },
   {
     "id": "lf05v2_sql_select_dragdrop_fitoffice_kontext",
+    "area": "sql",
     "name": "LF05V2 SQL SELECT Drag & Drop \xB7 FitOffice mit Kontext",
     "description": "30 Drag-&-Drop-Aufgaben nur zu SELECT-Abfragen. Jede Aufgabe enth\xE4lt einen kurzen FitOffice-Kontext und eine klare Gesucht-Beschreibung. Schwierigkeit: sehr leicht bis mittel.",
     "durationMinutes": 45,
@@ -23812,6 +23815,41 @@ var defaultTimerQuizPools = [
 // src/client/timer-quiz/TimerQuizApp.tsx
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var letters = ["A", "B", "C", "D", "E", "F"];
+var timerQuizAreas = {
+  software: {
+    eyebrow: "Software Entwicklung Allgemein",
+    title: "Software Entwicklung Allgemein",
+    description: "Trainiere Grundlagen zu Softwareprozess, Datenanalyse, Projektmanagement und Werkzeugen.",
+    uploadLabel: "JSON-Fragenpool laden",
+    emptyTitle: "Noch kein allgemeiner Fragenpool vorhanden",
+    emptyText: "Lade einen JSON-Fragenpool fuer allgemeine Softwareentwicklungsfragen oder nutze spaeter weitere Standardpools.",
+    sampleTitle: "Allgemeine Frageformen",
+    sampleText: "Normale Single- und Multiple-Choice-Fragen bleiben in diesem Arbeitsbereich.",
+    sampleCode: "Analyse -> Design -> Implementierung -> Test -> Betrieb"
+  },
+  sql: {
+    eyebrow: "SQL",
+    title: "SQL",
+    description: "Trainiere SQL-Fragen, SELECT-Abfragen und Drag-and-Drop-Reihenfolgen.",
+    uploadLabel: "SQL-JSON laden",
+    emptyTitle: "Noch kein SQL-Fragenpool vorhanden",
+    emptyText: "Lade einen SQL-Fragenpool als JSON. SQL-Drag-and-Drop-Fragen werden hier gebuendelt.",
+    sampleTitle: "SQL-Code",
+    sampleText: "SQL-Bausteine und Loesungen werden als Code dargestellt.",
+    sampleCode: "SELECT kunden_nr, vorname, nachname\nFROM mitglied\nWHERE status = 'aktiv'\nORDER BY nachname;"
+  },
+  python: {
+    eyebrow: "Python",
+    title: "Python",
+    description: "Lade Python-Fragenpools als JSON und trainiere Codefragen mit formatierter Python-Anzeige.",
+    uploadLabel: "Python-JSON laden",
+    emptyTitle: "Noch kein Python-Fragenpool geladen",
+    emptyText: "Dieser Bereich ist fuer Python-Fragen vorbereitet. Lade eine JSON-Datei mit Fragen, Optionen und Code-Fences wie ```python.",
+    sampleTitle: "Python-Code",
+    sampleText: "Fragen und Antworten koennen Code-Fences wie ```python enthalten. Diese werden im Quiz und in der Auswertung formatiert.",
+    sampleCode: 'def pruefe_import(datensaetze):\n    return [d for d in datensaetze if d.get("status") == "aktiv"]'
+  }
+};
 function durationMinutes(pool) {
   return Math.max(1, Number(pool.timeLimitMinutes || pool.durationMinutes || 60));
 }
@@ -23855,6 +23893,28 @@ function RichText({ html }) {
 }
 function isSqlOrderQuestion(question) {
   return question.type === "sql-order" || Array.isArray(question.blocks);
+}
+function normalizeArea(value) {
+  return value === "sql" || value === "python" || value === "software" ? value : "software";
+}
+function questionContainsPython(question) {
+  const values = [
+    question.text,
+    question.question,
+    question.frage,
+    question.title,
+    question.explanation,
+    question.type,
+    ...isSqlOrderQuestion(question) ? question.blocks.map((block) => block.text) : question.options
+  ];
+  return values.some((value) => /```(?:python|py)\b|<code>.*python|def\s+\w+\(|import\s+\w+|print\(|\.py\b/i.test(String(value || "")));
+}
+function areaForPool(pool) {
+  if (pool.area) return pool.area;
+  const searchable = `${pool.id || ""} ${pool.name || ""} ${pool.description || ""}`;
+  if (/sql|datenbank|select|join/i.test(searchable) || pool.questions.some(isSqlOrderQuestion)) return "sql";
+  if (/python|\.py/i.test(searchable) || pool.questions.some(questionContainsPython)) return "python";
+  return "software";
 }
 function optionIndexFromValue(value, options) {
   if (typeof value === "number" && Number.isInteger(value)) return value;
@@ -23912,7 +23972,7 @@ function normalizeCorrect(raw, options) {
   }
   return result.sort((a, b) => a - b);
 }
-function normalizePool(data, filename = "Fragenpool") {
+function normalizePool(data, filename = "Fragenpool", area = "software") {
   const source = data && typeof data === "object" ? data : {};
   let pool;
   if (Array.isArray(data)) pool = { name: filename.replace(/\.json$/i, ""), questions: data, topicLabels: {}, difficultyLabels: {} };
@@ -23925,6 +23985,7 @@ function normalizePool(data, filename = "Fragenpool") {
     id: `pool_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     name: String(pool.name || filename.replace(/\.json$/i, "") || "Geladener Fragenpool"),
     description: String(pool.description || ""),
+    area,
     durationMinutes: Number(pool.durationMinutes || pool.timeLimitMinutes || 60),
     timeLimitMinutes: Number(pool.timeLimitMinutes || pool.durationMinutes || 60),
     topicLabels: pool.topicLabels || {},
@@ -24010,23 +24071,47 @@ function statsFor(pool, answers) {
 function blockText(question, id) {
   return question.blocks.find((block) => block.id === id)?.text || id;
 }
-function TimerQuizApp() {
+function TimerQuizApp({ initialArea = "software" }) {
+  const normalizedInitialArea = normalizeArea(initialArea);
+  const initialPools = defaultTimerQuizPools.filter((item) => areaForPool(item) === normalizedInitialArea);
+  const [activeArea, setActiveArea] = (0, import_react.useState)(normalizedInitialArea);
   const [pools, setPools] = (0, import_react.useState)(defaultTimerQuizPools);
-  const [selectedPoolId, setSelectedPoolId] = (0, import_react.useState)(defaultTimerQuizPools[0]?.id || "");
+  const [selectedPoolId, setSelectedPoolId] = (0, import_react.useState)(initialPools[0]?.id || "");
   const [screen, setScreen] = (0, import_react.useState)("start");
   const [index, setIndex] = (0, import_react.useState)(0);
   const [answers, setAnswers] = (0, import_react.useState)([]);
-  const [seconds, setSeconds] = (0, import_react.useState)(durationMinutes(defaultTimerQuizPools[0]) * 60);
+  const [seconds, setSeconds] = (0, import_react.useState)(initialPools[0] ? durationMinutes(initialPools[0]) * 60 : 60 * 60);
   const [finishReason, setFinishReason] = (0, import_react.useState)("manual");
   const [uploadStatus, setUploadStatus] = (0, import_react.useState)("Noch kein zus\xE4tzlicher Fragenpool geladen.");
-  const pool = (0, import_react.useMemo)(() => pools.find((item) => item.id === selectedPoolId) || pools[0], [pools, selectedPoolId]);
+  const visiblePools = (0, import_react.useMemo)(() => pools.filter((item) => areaForPool(item) === activeArea), [pools, activeArea]);
+  const pool = (0, import_react.useMemo)(() => visiblePools.find((item) => item.id === selectedPoolId) || visiblePools[0], [visiblePools, selectedPoolId]);
   const question = pool?.questions[index];
   const result = (0, import_react.useMemo)(() => pool ? statsFor(pool, answers) : { good: 0, rows: [] }, [pool, answers]);
   const percent = pool?.questions.length ? Math.round(result.good / pool.questions.length * 100) : 0;
+  const areaConfig = timerQuizAreas[activeArea];
   const weakest = result.rows.reduce((current, row) => {
     if (!current || row.wrongPct > current.wrongPct) return row;
     return current;
   }, null);
+  (0, import_react.useEffect)(() => {
+    const handleAreaChange = (event) => {
+      const nextArea = normalizeArea(event.detail?.area);
+      setActiveArea(nextArea);
+      setScreen("start");
+      setIndex(0);
+      setAnswers([]);
+      setFinishReason("manual");
+    };
+    window.addEventListener("timer-quiz-area-change", handleAreaChange);
+    return () => window.removeEventListener("timer-quiz-area-change", handleAreaChange);
+  }, []);
+  (0, import_react.useEffect)(() => {
+    const nextPool = visiblePools.find((item) => item.id === selectedPoolId) || visiblePools[0];
+    setSelectedPoolId(nextPool?.id || "");
+    setIndex(0);
+    setAnswers([]);
+    setSeconds(nextPool ? durationMinutes(nextPool) * 60 : 60 * 60);
+  }, [activeArea, visiblePools, selectedPoolId]);
   (0, import_react.useEffect)(() => {
     if (screen !== "quiz") return void 0;
     const timer = window.setInterval(() => {
@@ -24043,6 +24128,7 @@ function TimerQuizApp() {
     return () => window.clearInterval(timer);
   }, [screen]);
   function resetForPool(nextPool = pool) {
+    if (!nextPool) return;
     setIndex(0);
     setAnswers([]);
     setSeconds(durationMinutes(nextPool) * 60);
@@ -24115,7 +24201,7 @@ function TimerQuizApp() {
       try {
         const raw = (await file.text()).replace(/^\uFEFF/, "").trim();
         if (!raw) throw new Error("Datei ist leer.");
-        const nextPool = normalizePool(JSON.parse(raw), file.name);
+        const nextPool = normalizePool(JSON.parse(raw), file.name, activeArea);
         setPools((previous) => [...previous, nextPool]);
         setSelectedPoolId(nextPool.id || "");
         resetForPool(nextPool);
@@ -24125,13 +24211,40 @@ function TimerQuizApp() {
       }
     }
   }
-  if (!pool) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "timer-quiz-empty", children: "Kein Fragenpool vorhanden." });
+  if (!pool) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "timer-quiz-app", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "timer-quiz-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "eyebrow", children: areaConfig.eyebrow }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: areaConfig.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: areaConfig.description })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "timer-pill", children: "--:--" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "timer-quiz-start", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "timer-quiz-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: areaConfig.emptyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: areaConfig.emptyText }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "upload-button timer-upload", children: [
+            areaConfig.uploadLabel,
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "file", accept: ".json,application/json", multiple: true, onChange: (event) => loadJsonFiles(event.target.files) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "status-line", children: uploadStatus })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "timer-quiz-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: areaConfig.sampleTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: areaConfig.sampleText }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: areaConfig.sampleCode }) })
+        ] })
+      ] })
+    ] });
+  }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "timer-quiz-app", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "timer-quiz-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "eyebrow", children: "React + TypeScript" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Timer-Quiz" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "JSON-Fragenpools laden, Python-Code anzeigen und Pr\xFCfungsfragen mit Zeitlimit bearbeiten." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "eyebrow", children: areaConfig.eyebrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: areaConfig.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: areaConfig.description })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `timer-pill ${seconds <= 60 && screen === "quiz" ? "danger" : seconds <= 300 && screen === "quiz" ? "warn" : ""}`, children: formatTime(seconds) })
     ] }),
@@ -24145,11 +24258,11 @@ function TimerQuizApp() {
             {
               value: selectedPoolId,
               onChange: (event) => {
-                const nextPool = pools.find((item) => item.id === event.target.value) || pools[0];
+                const nextPool = visiblePools.find((item) => item.id === event.target.value) || visiblePools[0];
                 setSelectedPoolId(nextPool.id || "");
                 resetForPool(nextPool);
               },
-              children: pools.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: item.id, children: item.name }, item.id))
+              children: visiblePools.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: item.id, children: item.name }, item.id))
             }
           )
         ] }),
@@ -24169,22 +24282,16 @@ function TimerQuizApp() {
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "upload-button timer-upload", children: [
-          "JSON-Fragenpool laden",
+          areaConfig.uploadLabel,
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "file", accept: ".json,application/json", multiple: true, onChange: (event) => loadJsonFiles(event.target.files) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "status-line", children: uploadStatus }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: startTest, children: "Test starten" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "timer-quiz-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Python-Code" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-          "Fragen und Antworten k\xF6nnen Code-Fences wie ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "```python" }),
-          " oder HTML-",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "<code>" }),
-          "-Abschnitte enthalten. Diese werden im Quiz und in der Auswertung als Code dargestellt."
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: 'def pruefe_import(datensaetze):\n    return [d for d in datensaetze if d.get("status") == "aktiv"]' }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: areaConfig.sampleTitle }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: areaConfig.sampleText }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: areaConfig.sampleCode }) })
       ] })
     ] }),
     screen === "quiz" && question && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "timer-quiz-play", children: [
@@ -24427,7 +24534,8 @@ function ResultDetail({
 var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
 var rootElement = document.querySelector("#timerQuizRoot");
 if (rootElement) {
-  (0, import_client.createRoot)(rootElement).render(/* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TimerQuizApp, {}));
+  const initialArea = rootElement.getAttribute("data-timer-quiz-area") || "software";
+  (0, import_client.createRoot)(rootElement).render(/* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TimerQuizApp, { initialArea }));
 }
 /*! Bundled license information:
 

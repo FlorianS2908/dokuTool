@@ -4,6 +4,7 @@ import type { QuizPool } from './types';
 export const defaultTimerQuizPools: QuizPool[] = [
   {
     "id": "software_daten_grundlagentest_25",
+    "area": "software",
     "name": "Software und Daten · Grundlagentest · 25 Fragen",
     "description": "25 prüfungsnahe Fragen zu Datenanalyse, Datenqualität, Datenobjekten, Attributen, Importprüfung, Softwarelebenszyklus, Prozessphasen, Projektmanagement, PDCA, Vorgehensmodellen, Programmiersprachen, Frameworks und Werkzeugen. Zeitlimit: 25 Minuten.",
     "durationMinutes": 25,
@@ -426,6 +427,7 @@ export const defaultTimerQuizPools: QuizPool[] = [
   },
   {
     "id": "software_daten_kurztest_15",
+    "area": "software",
     "name": "Software und Daten · Kurztest · 15 Fragen",
     "description": "15 Fragen zur Wiederholung von Softwareprozess, Datenanalyse, Design, Test, Projektmanagement, Vorgehensmodellen, Programmiersprachen und Werkzeugen. Zeitlimit: 20 Minuten.",
     "durationMinutes": 20,
@@ -694,6 +696,7 @@ export const defaultTimerQuizPools: QuizPool[] = [
   },
   {
     "id": "lf05v2_sql_select_dragdrop_fitoffice_kontext",
+    "area": "sql",
     "name": "LF05V2 SQL SELECT Drag & Drop · FitOffice mit Kontext",
     "description": "30 Drag-&-Drop-Aufgaben nur zu SELECT-Abfragen. Jede Aufgabe enthält einen kurzen FitOffice-Kontext und eine klare Gesucht-Beschreibung. Schwierigkeit: sehr leicht bis mittel.",
     "durationMinutes": 45,

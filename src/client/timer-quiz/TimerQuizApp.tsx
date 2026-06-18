@@ -4,8 +4,54 @@ import type { AnswerValue, QuizPool, QuizQuestion, SqlBlock, SqlOrderQuestion, T
 
 type Screen = 'start' | 'quiz' | 'result';
 type FinishReason = 'manual' | 'timeout';
+type TimerQuizArea = 'software' | 'sql' | 'python';
 
 const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+const timerQuizAreas: Record<TimerQuizArea, {
+  eyebrow: string;
+  title: string;
+  description: string;
+  uploadLabel: string;
+  emptyTitle: string;
+  emptyText: string;
+  sampleTitle: string;
+  sampleText: string;
+  sampleCode: string;
+}> = {
+  software: {
+    eyebrow: 'Software Entwicklung Allgemein',
+    title: 'Software Entwicklung Allgemein',
+    description: 'Trainiere Grundlagen zu Softwareprozess, Datenanalyse, Projektmanagement und Werkzeugen.',
+    uploadLabel: 'JSON-Fragenpool laden',
+    emptyTitle: 'Noch kein allgemeiner Fragenpool vorhanden',
+    emptyText: 'Lade einen JSON-Fragenpool fuer allgemeine Softwareentwicklungsfragen oder nutze spaeter weitere Standardpools.',
+    sampleTitle: 'Allgemeine Frageformen',
+    sampleText: 'Normale Single- und Multiple-Choice-Fragen bleiben in diesem Arbeitsbereich.',
+    sampleCode: 'Analyse -> Design -> Implementierung -> Test -> Betrieb'
+  },
+  sql: {
+    eyebrow: 'SQL',
+    title: 'SQL',
+    description: 'Trainiere SQL-Fragen, SELECT-Abfragen und Drag-and-Drop-Reihenfolgen.',
+    uploadLabel: 'SQL-JSON laden',
+    emptyTitle: 'Noch kein SQL-Fragenpool vorhanden',
+    emptyText: 'Lade einen SQL-Fragenpool als JSON. SQL-Drag-and-Drop-Fragen werden hier gebuendelt.',
+    sampleTitle: 'SQL-Code',
+    sampleText: 'SQL-Bausteine und Loesungen werden als Code dargestellt.',
+    sampleCode: "SELECT kunden_nr, vorname, nachname\nFROM mitglied\nWHERE status = 'aktiv'\nORDER BY nachname;"
+  },
+  python: {
+    eyebrow: 'Python',
+    title: 'Python',
+    description: 'Lade Python-Fragenpools als JSON und trainiere Codefragen mit formatierter Python-Anzeige.',
+    uploadLabel: 'Python-JSON laden',
+    emptyTitle: 'Noch kein Python-Fragenpool geladen',
+    emptyText: 'Dieser Bereich ist fuer Python-Fragen vorbereitet. Lade eine JSON-Datei mit Fragen, Optionen und Code-Fences wie ```python.',
+    sampleTitle: 'Python-Code',
+    sampleText: 'Fragen und Antworten koennen Code-Fences wie ```python enthalten. Diese werden im Quiz und in der Auswertung formatiert.',
+    sampleCode: 'def pruefe_import(datensaetze):\n    return [d for d in datensaetze if d.get("status") == "aktiv"]'
+  }
+};
 
 function durationMinutes(pool: QuizPool): number {
   return Math.max(1, Number(pool.timeLimitMinutes || pool.durationMinutes || 60));
@@ -63,6 +109,31 @@ function RichText({ html }: { html?: string }) {
 
 function isSqlOrderQuestion(question: QuizQuestion): question is SqlOrderQuestion {
   return question.type === 'sql-order' || Array.isArray((question as SqlOrderQuestion).blocks);
+}
+
+function normalizeArea(value: unknown): TimerQuizArea {
+  return value === 'sql' || value === 'python' || value === 'software' ? value : 'software';
+}
+
+function questionContainsPython(question: QuizQuestion): boolean {
+  const values = [
+    question.text,
+    question.question,
+    question.frage,
+    question.title,
+    question.explanation,
+    question.type,
+    ...(isSqlOrderQuestion(question) ? question.blocks.map((block) => block.text) : question.options)
+  ];
+  return values.some((value) => /```(?:python|py)\b|<code>.*python|def\s+\w+\(|import\s+\w+|print\(|\.py\b/i.test(String(value || '')));
+}
+
+function areaForPool(pool: QuizPool): TimerQuizArea {
+  if (pool.area) return pool.area;
+  const searchable = `${pool.id || ''} ${pool.name || ''} ${pool.description || ''}`;
+  if (/sql|datenbank|select|join/i.test(searchable) || pool.questions.some(isSqlOrderQuestion)) return 'sql';
+  if (/python|\.py/i.test(searchable) || pool.questions.some(questionContainsPython)) return 'python';
+  return 'software';
 }
 
 function optionIndexFromValue(value: unknown, options: string[]): number | null {
@@ -131,7 +202,7 @@ function normalizeCorrect(raw: unknown, options: string[]): number[] {
   return result.sort((a, b) => a - b);
 }
 
-function normalizePool(data: unknown, filename = 'Fragenpool'): QuizPool {
+function normalizePool(data: unknown, filename = 'Fragenpool', area: TimerQuizArea = 'software'): QuizPool {
   const source = data && typeof data === 'object' ? data as Record<string, unknown> : {};
   let pool: Record<string, unknown>;
 
@@ -147,6 +218,7 @@ function normalizePool(data: unknown, filename = 'Fragenpool'): QuizPool {
     id: `pool_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     name: String(pool.name || filename.replace(/\.json$/i, '') || 'Geladener Fragenpool'),
     description: String(pool.description || ''),
+    area,
     durationMinutes: Number(pool.durationMinutes || pool.timeLimitMinutes || 60),
     timeLimitMinutes: Number(pool.timeLimitMinutes || pool.durationMinutes || 60),
     topicLabels: pool.topicLabels as Record<string, string> || {},
@@ -243,24 +315,51 @@ function blockText(question: SqlOrderQuestion, id: string): string {
   return question.blocks.find((block) => block.id === id)?.text || id;
 }
 
-export function TimerQuizApp() {
+export function TimerQuizApp({ initialArea = 'software' }: { initialArea?: TimerQuizArea }) {
+  const normalizedInitialArea = normalizeArea(initialArea);
+  const initialPools = defaultTimerQuizPools.filter((item) => areaForPool(item) === normalizedInitialArea);
+  const [activeArea, setActiveArea] = useState<TimerQuizArea>(normalizedInitialArea);
   const [pools, setPools] = useState<QuizPool[]>(defaultTimerQuizPools);
-  const [selectedPoolId, setSelectedPoolId] = useState(defaultTimerQuizPools[0]?.id || '');
+  const [selectedPoolId, setSelectedPoolId] = useState(initialPools[0]?.id || '');
   const [screen, setScreen] = useState<Screen>('start');
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerValue[]>([]);
-  const [seconds, setSeconds] = useState(durationMinutes(defaultTimerQuizPools[0]) * 60);
+  const [seconds, setSeconds] = useState(initialPools[0] ? durationMinutes(initialPools[0]) * 60 : 60 * 60);
   const [finishReason, setFinishReason] = useState<FinishReason>('manual');
   const [uploadStatus, setUploadStatus] = useState('Noch kein zusätzlicher Fragenpool geladen.');
 
-  const pool = useMemo(() => pools.find((item) => item.id === selectedPoolId) || pools[0], [pools, selectedPoolId]);
+  const visiblePools = useMemo(() => pools.filter((item) => areaForPool(item) === activeArea), [pools, activeArea]);
+  const pool = useMemo(() => visiblePools.find((item) => item.id === selectedPoolId) || visiblePools[0], [visiblePools, selectedPoolId]);
   const question = pool?.questions[index];
   const result = useMemo(() => pool ? statsFor(pool, answers) : { good: 0, rows: [] }, [pool, answers]);
   const percent = pool?.questions.length ? Math.round((result.good / pool.questions.length) * 100) : 0;
+  const areaConfig = timerQuizAreas[activeArea];
   const weakest = result.rows.reduce<TopicResult | null>((current, row) => {
     if (!current || row.wrongPct > current.wrongPct) return row;
     return current;
   }, null);
+
+  useEffect(() => {
+    const handleAreaChange = (event: Event) => {
+      const nextArea = normalizeArea((event as CustomEvent<{ area?: string }>).detail?.area);
+      setActiveArea(nextArea);
+      setScreen('start');
+      setIndex(0);
+      setAnswers([]);
+      setFinishReason('manual');
+    };
+
+    window.addEventListener('timer-quiz-area-change', handleAreaChange);
+    return () => window.removeEventListener('timer-quiz-area-change', handleAreaChange);
+  }, []);
+
+  useEffect(() => {
+    const nextPool = visiblePools.find((item) => item.id === selectedPoolId) || visiblePools[0];
+    setSelectedPoolId(nextPool?.id || '');
+    setIndex(0);
+    setAnswers([]);
+    setSeconds(nextPool ? durationMinutes(nextPool) * 60 : 60 * 60);
+  }, [activeArea, visiblePools, selectedPoolId]);
 
   useEffect(() => {
     if (screen !== 'quiz') return undefined;
@@ -278,7 +377,8 @@ export function TimerQuizApp() {
     return () => window.clearInterval(timer);
   }, [screen]);
 
-  function resetForPool(nextPool = pool) {
+  function resetForPool(nextPool: QuizPool | undefined = pool) {
+    if (!nextPool) return;
     setIndex(0);
     setAnswers([]);
     setSeconds(durationMinutes(nextPool) * 60);
@@ -360,7 +460,7 @@ export function TimerQuizApp() {
       try {
         const raw = (await file.text()).replace(/^\uFEFF/, '').trim();
         if (!raw) throw new Error('Datei ist leer.');
-        const nextPool = normalizePool(JSON.parse(raw), file.name);
+        const nextPool = normalizePool(JSON.parse(raw), file.name, activeArea);
         setPools((previous) => [...previous, nextPool]);
         setSelectedPoolId(nextPool.id || '');
         resetForPool(nextPool);
@@ -371,15 +471,46 @@ export function TimerQuizApp() {
     }
   }
 
-  if (!pool) return <div className="timer-quiz-empty">Kein Fragenpool vorhanden.</div>;
+  if (!pool) {
+    return (
+      <div className="timer-quiz-app">
+        <header className="timer-quiz-header">
+          <div>
+            <span className="eyebrow">{areaConfig.eyebrow}</span>
+            <h2>{areaConfig.title}</h2>
+            <p>{areaConfig.description}</p>
+          </div>
+          <span className="timer-pill">--:--</span>
+        </header>
+
+        <section className="timer-quiz-start">
+          <article className="timer-quiz-card">
+            <h3>{areaConfig.emptyTitle}</h3>
+            <p>{areaConfig.emptyText}</p>
+            <label className="upload-button timer-upload">
+              {areaConfig.uploadLabel}
+              <input type="file" accept=".json,application/json" multiple onChange={(event) => loadJsonFiles(event.target.files)} />
+            </label>
+            <p className="status-line">{uploadStatus}</p>
+          </article>
+
+          <article className="timer-quiz-card">
+            <h3>{areaConfig.sampleTitle}</h3>
+            <p>{areaConfig.sampleText}</p>
+            <pre><code>{areaConfig.sampleCode}</code></pre>
+          </article>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="timer-quiz-app">
       <header className="timer-quiz-header">
         <div>
-          <span className="eyebrow">React + TypeScript</span>
-          <h2>Timer-Quiz</h2>
-          <p>JSON-Fragenpools laden, Python-Code anzeigen und Prüfungsfragen mit Zeitlimit bearbeiten.</p>
+          <span className="eyebrow">{areaConfig.eyebrow}</span>
+          <h2>{areaConfig.title}</h2>
+          <p>{areaConfig.description}</p>
         </div>
         <span className={`timer-pill ${seconds <= 60 && screen === 'quiz' ? 'danger' : seconds <= 300 && screen === 'quiz' ? 'warn' : ''}`}>
           {formatTime(seconds)}
@@ -395,12 +526,12 @@ export function TimerQuizApp() {
               <select
                 value={selectedPoolId}
                 onChange={(event) => {
-                  const nextPool = pools.find((item) => item.id === event.target.value) || pools[0];
+                  const nextPool = visiblePools.find((item) => item.id === event.target.value) || visiblePools[0];
                   setSelectedPoolId(nextPool.id || '');
                   resetForPool(nextPool);
                 }}
               >
-                {pools.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {visiblePools.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
             <p>{pool.description}</p>
@@ -410,7 +541,7 @@ export function TimerQuizApp() {
               <span>{Object.keys(pool.topicLabels || {}).length || 'freie'} Themen</span>
             </div>
             <label className="upload-button timer-upload">
-              JSON-Fragenpool laden
+              {areaConfig.uploadLabel}
               <input type="file" accept=".json,application/json" multiple onChange={(event) => loadJsonFiles(event.target.files)} />
             </label>
             <p className="status-line">{uploadStatus}</p>
@@ -418,9 +549,9 @@ export function TimerQuizApp() {
           </article>
 
           <article className="timer-quiz-card">
-            <h3>Python-Code</h3>
-            <p>Fragen und Antworten können Code-Fences wie <code>```python</code> oder HTML-<code>&lt;code&gt;</code>-Abschnitte enthalten. Diese werden im Quiz und in der Auswertung als Code dargestellt.</p>
-            <pre><code>{'def pruefe_import(datensaetze):\n    return [d for d in datensaetze if d.get("status") == "aktiv"]'}</code></pre>
+            <h3>{areaConfig.sampleTitle}</h3>
+            <p>{areaConfig.sampleText}</p>
+            <pre><code>{areaConfig.sampleCode}</code></pre>
           </article>
         </section>
       )}

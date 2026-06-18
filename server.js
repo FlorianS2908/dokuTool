@@ -10,6 +10,7 @@ import ExcelJS from 'exceljs';
 import { createHmac, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { createDataStore, toPublicUser } from './data-store.js';
 import { GENERAL_IHK_RULES, getIhkRuleProfile, ihkProfilesForClient } from './ihk-rules.js';
+import { evaluateAbschlussprojektRuleset } from './ruleset-evaluator.js';
 import { securityHeaders } from './src/server/security.js';
 import {
   loadQuizQuestionPools,
@@ -51,14 +52,6 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-function base64UrlEncode(value) {
-  return Buffer.from(value).toString('base64url');
-}
-
-function base64UrlDecode(value) {
-  return Buffer.from(value, 'base64url').toString('utf8');
-}
-
 function sign(value) {
   return createHmac('sha256', sessionSecret).update(value).digest('base64url');
 }
@@ -77,34 +70,18 @@ function parseCookies(header = '') {
   );
 }
 
-function createSessionToken(userId) {
-  const payload = base64UrlEncode(JSON.stringify({
-    userId,
-    expiresAt: Date.now() + sessionMaxAgeSeconds * 1000
-  }));
-  return `${payload}.${sign(payload)}`;
-}
-
 function readSessionToken(req) {
   const cookies = parseCookies(req.headers.cookie || '');
   return cookies[sessionCookieName] || '';
 }
 
-function verifySessionToken(token) {
-  const [payload, signature] = String(token || '').split('.');
-  if (!payload || !signature || sign(payload) !== signature) return null;
-
-  try {
-    const data = JSON.parse(base64UrlDecode(payload));
-    if (!data.userId || !data.expiresAt || Date.now() > data.expiresAt) return null;
-    return data;
-  } catch {
-    return null;
-  }
+function sessionIdFromToken(token) {
+  const value = String(token || '');
+  if (!value || value.length < 32) return '';
+  return sign(`session:${value}`);
 }
 
-function setSessionCookie(res, userId) {
-  const token = createSessionToken(userId);
+function setSessionCookie(res, token) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
@@ -117,6 +94,30 @@ function clearSessionCookie(res) {
     'Set-Cookie',
     `${sessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
   );
+}
+
+async function startSession(req, res, userId) {
+  const token = randomBytes(32).toString('base64url');
+  const sessionId = sessionIdFromToken(token);
+  const nowIso = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + sessionMaxAgeSeconds * 1000).toISOString();
+
+  await dataStore.createSession({
+    id: sessionId,
+    userId,
+    createdAt: nowIso,
+    lastSeenAt: nowIso,
+    expiresAt,
+    userAgent: String(req.headers['user-agent'] || '').slice(0, 500)
+  });
+
+  setSessionCookie(res, token);
+}
+
+async function endSession(req, res) {
+  const sessionId = sessionIdFromToken(readSessionToken(req));
+  if (sessionId) await dataStore.deleteSession(sessionId);
+  clearSessionCookie(res);
 }
 
 function normalizeEmailInput(email) {
@@ -146,9 +147,18 @@ function verifyPassword(password, user) {
 }
 
 async function getSessionUser(req) {
-  const session = verifySessionToken(readSessionToken(req));
+  const sessionId = sessionIdFromToken(readSessionToken(req));
+  if (!sessionId) return null;
+
+  const session = await dataStore.getSession(sessionId);
   if (!session) return null;
-  return dataStore.getUser(session.userId);
+  const user = await dataStore.getUser(session.userId);
+  if (!user) {
+    await dataStore.deleteSession(sessionId);
+    return null;
+  }
+  await dataStore.touchSession(sessionId);
+  return user;
 }
 
 async function requireAuth(req, res, next) {
@@ -1620,6 +1630,15 @@ function localAnalyze(doc, AntragDoc, options = {}) {
     }
   }
 
+  const rulesetEvaluation = evaluateAbschlussprojektRuleset({
+    doc,
+    AntragDoc,
+    options,
+    profile: ihkProfile
+  });
+  meta.ruleset = rulesetEvaluation.metadata;
+  results.push(...rulesetEvaluation.results);
+
   const weighted = results.reduce((acc, item) => {
     acc.total += item.weight || 1;
     acc.score += statusScore(item.status) * (item.weight || 1);
@@ -1922,7 +1941,7 @@ app.post('/api/auth/register', async (req, res) => {
       ...hashPassword(password)
     });
 
-    setSessionCookie(res, user.id);
+    await startSession(req, res, user.id);
     res.status(201).json({ user: toPublicUser(user) });
   } catch (error) {
     if (error.code === 'EMAIL_EXISTS') {
@@ -1943,7 +1962,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'E-Mail oder Passwort ist falsch.' });
     }
 
-    setSessionCookie(res, user.id);
+    await startSession(req, res, user.id);
     res.json({ user: toPublicUser(user) });
   } catch (error) {
     console.error(error);
@@ -1951,8 +1970,8 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (_req, res) => {
-  clearSessionCookie(res);
+app.post('/api/auth/logout', async (req, res) => {
+  await endSession(req, res);
   res.json({ ok: true });
 });
 

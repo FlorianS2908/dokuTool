@@ -1,0 +1,901 @@
+{
+  "ruleset": {
+    "id": "ihk_abschlussprojekt_bewertung",
+    "name": "Ruleset zur Bewertung von IHK-Abschlussprojektdokumentationen",
+    "version": "1.0.0",
+    "language": "de-DE",
+    "created_at": "2026-06-18",
+    "description": "Maschinenlesbares Regelwerk zur formalen und fachlichen Bewertung von IHK-Abschlussprojektdokumentationen. Das Ruleset ist bewusst profilbasiert aufgebaut, da einzelne IHKs unterschiedliche Vorgaben zu Seitenumfang, Schriftart, KI-Nutzung, Glossar und Anlagen machen können.",
+    "intended_use": [
+      "Vorprüfung einer Projektdokumentation vor der Abgabe",
+      "Abgleich einer Dokumentation mit Projektantrag und IHK-Profil",
+      "Erzeugung priorisierter Findings mit Schweregrad und Verbesserungsempfehlung",
+      "Nicht als rechtsverbindliche IHK-Bewertung zu verstehen"
+    ],
+    "source_basis": [
+      "Formatierung.pdf",
+      "Anmerkungen.docx",
+      "ProjektCheckListe (1).pdf",
+      "ProjektCheckListe+Erläuterung der ToDo's (1).pdf",
+      "ProjektgliederungSchritt1 (1).pdf",
+      "ProjektgliederungSchritt2 (1).pdf",
+      "ProjektgliederungSchritt4 + Inkrement (3).pdf",
+      "Anforderungsdokumentation.pdf",
+      "Architektur- und Systemdesign-Dokumentation.pdf",
+      "Testdokumentation.pdf",
+      "Sicherheits- und Compliance-Dokumentation.pdf",
+      "API-Dokumentation.pdf",
+      "Entwicklerdokumentation.pdf",
+      "Betriebs-, Admin- und Runbook-Dokumentation.pdf",
+      "Beispieldokumentationen FIAE/FISI"
+    ]
+  },
+  "severity_levels": {
+    "BLOCKER": "Kann zur Nichtannahme, Täuschungsvermutung oder massiver Abwertung führen.",
+    "CRITICAL": "Zentraler IHK-/Projektbestandteil fehlt oder ist kaum bewertbar.",
+    "MAJOR": "Wichtiges Kriterium ist nur oberflächlich, unvollständig oder nicht nachvollziehbar erfüllt.",
+    "MINOR": "Formaler, sprachlicher oder struktureller Mangel.",
+    "INFO": "Hinweis oder Verbesserungsvorschlag ohne direkte starke Abwertung.",
+    "BONUS": "Besonders gute Ausarbeitung oder überdurchschnittliche Nachvollziehbarkeit."
+  },
+  "score_model": {
+    "total_points": 100,
+    "categories": [
+      {
+        "id": "CAT-01",
+        "name": "Formale IHK-Konformität",
+        "max_points": 15
+      },
+      {
+        "id": "CAT-02",
+        "name": "Struktur und Gliederung",
+        "max_points": 10
+      },
+      {
+        "id": "CAT-03",
+        "name": "Projektverständnis und Eigenleistung",
+        "max_points": 10
+      },
+      {
+        "id": "CAT-04",
+        "name": "Analyse und Anforderungen",
+        "max_points": 12
+      },
+      {
+        "id": "CAT-05",
+        "name": "Planung, Ressourcen und Wirtschaftlichkeit",
+        "max_points": 12
+      },
+      {
+        "id": "CAT-06",
+        "name": "Entwurf, Architektur und technische Konzeption",
+        "max_points": 12
+      },
+      {
+        "id": "CAT-07",
+        "name": "Implementierung / Realisierung",
+        "max_points": 10
+      },
+      {
+        "id": "CAT-08",
+        "name": "Test, Qualitätssicherung und Abnahme",
+        "max_points": 12
+      },
+      {
+        "id": "CAT-09",
+        "name": "Fazit, Soll-Ist-Vergleich und Reflexion",
+        "max_points": 5
+      },
+      {
+        "id": "CAT-10",
+        "name": "Sprache, Quellen, Verweise und Nachvollziehbarkeit",
+        "max_points": 2
+      }
+    ],
+    "rating_bands": [
+      {
+        "min": 90,
+        "max": 100,
+        "label": "sehr gut / prüfungsstark",
+        "risk": "niedrig"
+      },
+      {
+        "min": 80,
+        "max": 89,
+        "label": "gut / solide prüfungsfähig",
+        "risk": "niedrig bis mittel"
+      },
+      {
+        "min": 65,
+        "max": 79,
+        "label": "befriedigend / deutliche Verbesserungsmöglichkeiten",
+        "risk": "mittel"
+      },
+      {
+        "min": 50,
+        "max": 64,
+        "label": "kritisch / fachlich oder formal lückenhaft",
+        "risk": "hoch"
+      },
+      {
+        "min": 0,
+        "max": 49,
+        "label": "nicht ausreichend / hohe Durchfallgefahr",
+        "risk": "sehr hoch"
+      }
+    ]
+  },
+  "ihk_profile": {
+    "required": true,
+    "description": "Alle regionalen Vorgaben werden in einem IHK-Profil hinterlegt und vor der Bewertung geladen.",
+    "fields": {
+      "ihk_name": "Name der zuständigen IHK",
+      "profession": "FIAE, FISI oder anderer IT-Beruf",
+      "max_text_pages": "Maximale Seitenzahl für den Hauptteil",
+      "max_appendix_pages": "Maximale Seitenzahl für Anlagen",
+      "count_cover_toc_sources_appendix": "Definition, welche Teile zur Seitenzahl zählen",
+      "font_family_allowed": [
+        "Arial",
+        "Calibri",
+        "Aptos",
+        "Times New Roman",
+        "Tahoma",
+        "Inter"
+      ],
+      "font_size_body": "10 bis 12 pt oder regionalspezifisch",
+      "line_spacing": "1.15 bis 1.5 oder regionalspezifisch",
+      "page_margins": "Regionalspezifisch, z. B. DIN 5008 oder IHK-Vorgabe",
+      "glossary_required": "true/false/conditional",
+      "ai_usage_policy": "Regionalspezifisch: erlaubt, eingeschränkt oder verboten",
+      "declaration_required": true
+    }
+  },
+  "preprocessing_requirements": [
+    {
+      "id": "PRE-001",
+      "name": "Dokument extrahieren",
+      "rule": "Text, Überschriften, Tabellen, Abbildungen, Listings, Fußnoten, Kopf-/Fußzeilen, Quellen, Anhänge und Seitenzahlen müssen extrahiert werden."
+    },
+    {
+      "id": "PRE-002",
+      "name": "Projektantrag einbeziehen",
+      "rule": "Wenn ein Projektantrag vorhanden ist, muss die Dokumentation gegen Projektziel, Zeitplanung, Umfang, Technologien und Abgrenzung des genehmigten Antrags geprüft werden."
+    },
+    {
+      "id": "PRE-003",
+      "name": "Dokumenttyp erkennen",
+      "rule": "Das Tool erkennt Beruf, Projektart, Software-/Systemintegrationsanteil, Datenbankbezug, API-Bezug, UI-Bezug, Sicherheitsbezug und Testumfang."
+    }
+  ],
+  "blocker_rules": [
+    {
+      "id": "KO-001",
+      "name": "Dokument nicht lesbar oder überwiegend als Bild eingebunden",
+      "severity": "BLOCKER",
+      "category": "CAT-01",
+      "rule": "Die Projektdokumentation muss maschinenlesbaren Fließtext enthalten. Wenn große Teile nur aus Screenshots/Bildern bestehen, ist eine fachliche Prüfung nur eingeschränkt möglich.",
+      "detection": [
+        "ocr_ratio_high",
+        "extractable_text_ratio_below_threshold"
+      ],
+      "recommendation": "Dokument als echten Text exportieren und Bilder nur für Diagramme, Screenshots oder Nachweise verwenden."
+    },
+    {
+      "id": "KO-002",
+      "name": "Eigenständigkeitserklärung fehlt",
+      "severity": "BLOCKER",
+      "category": "CAT-01",
+      "rule": "Eine Eigenständigkeits- bzw. persönliche Erklärung muss vorhanden sein, sofern im IHK-Profil gefordert.",
+      "detection": [
+        "missing_terms:eigenständig",
+        "missing_terms:persönliche Erklärung",
+        "missing_terms:Selbstständigkeitserklärung"
+      ],
+      "recommendation": "Eigenständigkeitserklärung gemäß IHK-Vorgabe ergänzen."
+    },
+    {
+      "id": "KO-003",
+      "name": "Seitenumfang überschritten",
+      "severity": "BLOCKER",
+      "category": "CAT-01",
+      "rule": "Die Dokumentation darf die im IHK-Profil definierte Seitenzahl nicht überschreiten. Deckblatt, Verzeichnisse und Anlagen werden je nach IHK-Profil getrennt gezählt.",
+      "detection": [
+        "page_count_exceeds_profile_limit"
+      ],
+      "recommendation": "Hauptteil kürzen, Artefakte in den Anhang verschieben und IHK-Zählweise prüfen."
+    },
+    {
+      "id": "KO-004",
+      "name": "Projekt entspricht nicht dem genehmigten Antrag",
+      "severity": "BLOCKER",
+      "category": "CAT-03",
+      "rule": "Erkennbare Abweichungen vom genehmigten Projektantrag müssen erklärt und begründet werden.",
+      "detection": [
+        "application_document_mismatch_without_explanation"
+      ],
+      "recommendation": "Kapitel 'Abweichungen zum Projektantrag' ergänzen oder vorhandene Abweichungen begründen."
+    },
+    {
+      "id": "KO-005",
+      "name": "Fremdinhalte ohne Quellenangabe",
+      "severity": "BLOCKER",
+      "category": "CAT-10",
+      "rule": "Fremde Inhalte, Bilder, Code, Tabellen oder KI-generierte Inhalte müssen gemäß IHK-Profil gekennzeichnet werden.",
+      "detection": [
+        "foreign_content_without_source",
+        "image_without_source_if_external",
+        "code_without_origin"
+      ],
+      "recommendation": "Quellen, Lizenzen und Hilfsmittel sauber ergänzen."
+    },
+    {
+      "id": "KO-006",
+      "name": "Keine erkennbare Eigenleistung",
+      "severity": "BLOCKER",
+      "category": "CAT-03",
+      "rule": "Die Dokumentation muss zeigen, was der Prüfling selbst geplant, entschieden, umgesetzt, getestet und reflektiert hat.",
+      "detection": [
+        "no_first_person_or_author_actions",
+        "implementation_only_vendor_tool",
+        "no_decisions_no_artifacts"
+      ],
+      "recommendation": "Eigenen Anteil, eigene Entscheidungen, Umsetzungsschritte und Prüflingsleistung explizit darstellen."
+    }
+  ],
+  "rules": [
+    {
+      "id": "FORM-001",
+      "category": "CAT-01",
+      "name": "Deckblatt vollständig",
+      "severity": "CRITICAL",
+      "points": 2,
+      "required_elements": [
+        "Projekttitel",
+        "Ausbildungsberuf",
+        "Prüfling oder Prüflingsnummer",
+        "Ausbildungsbetrieb",
+        "Abgabedatum oder Fertigstellungsdatum",
+        "betriebliche Projektarbeit"
+      ],
+      "rule": "Das Deckblatt muss die grundlegenden Metadaten des Projekts enthalten.",
+      "recommendation": "Deckblatt mit allen Pflichtangaben gemäß IHK-Profil ergänzen."
+    },
+    {
+      "id": "FORM-002",
+      "category": "CAT-01",
+      "name": "Inhaltsverzeichnis und Seitennummerierung vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "required_elements": [
+        "Inhaltsverzeichnis",
+        "Seitennummerierung"
+      ],
+      "rule": "Ein Inhaltsverzeichnis mit nachvollziehbarer Seitenstruktur und Seitennummerierung muss vorhanden sein.",
+      "recommendation": "Automatisches Inhaltsverzeichnis aktualisieren und Seitenzahlen prüfen."
+    },
+    {
+      "id": "FORM-003",
+      "category": "CAT-01",
+      "name": "Bedingte Verzeichnisse vorhanden",
+      "severity": "MAJOR",
+      "points": 3,
+      "conditional_checks": {
+        "Abbildungsverzeichnis": "erforderlich, wenn Abbildungen vorhanden sind",
+        "Tabellenverzeichnis": "erforderlich, wenn Tabellen vorhanden sind",
+        "Listingverzeichnis": "erforderlich, wenn Code-Listings vorhanden sind",
+        "Abkürzungsverzeichnis": "erforderlich, wenn viele oder nicht allgemein bekannte Abkürzungen vorhanden sind",
+        "Anhangsverzeichnis": "erforderlich, wenn Anhänge vorhanden sind",
+        "Quellenverzeichnis": "erforderlich, wenn externe Quellen, Normen, Bilder, Code, Bibliotheken oder KI-Hilfsmittel verwendet werden"
+      },
+      "rule": "Verzeichnisse müssen passend zum tatsächlichen Inhalt vorhanden und vollständig sein.",
+      "recommendation": "Fehlende Verzeichnisse ergänzen und alle Nummerierungen aktualisieren."
+    },
+    {
+      "id": "FORM-004",
+      "category": "CAT-01",
+      "name": "Anlagen korrekt eingebunden",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Jede Anlage muss relevant sein und aus dem Fließtext heraus referenziert werden. Jeder Anhangsverweis muss auf eine vorhandene Anlage zeigen.",
+      "recommendation": "Anhangsverweise im Fließtext ergänzen oder unnötige Anlagen entfernen."
+    },
+    {
+      "id": "FORM-005",
+      "category": "CAT-01",
+      "name": "Regionale Formatvorgaben eingehalten",
+      "severity": "CRITICAL",
+      "points": 4,
+      "rule": "Schriftart, Schriftgröße, Zeilenabstand, Seitenränder, Seitenzahl, Kopf-/Fußzeile und Glossar werden gegen das geladene IHK-Profil geprüft.",
+      "recommendation": "Dokumentlayout an das zuständige IHK-Profil anpassen."
+    },
+    {
+      "id": "FORM-006",
+      "category": "CAT-01",
+      "name": "Äußere Form fehlerarm",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Rechtschreibung, Grammatik, Layout, Verzeichnisse, Verweise und Literaturangaben müssen sauber und konsistent sein.",
+      "recommendation": "Endkorrektur durchführen und automatische Felder aktualisieren."
+    },
+    {
+      "id": "STR-001",
+      "category": "CAT-02",
+      "name": "Mindestgliederung vorhanden",
+      "severity": "CRITICAL",
+      "points": 5,
+      "required_sections": [
+        "Einleitung",
+        "Projektumfeld",
+        "Projektziel",
+        "Projektbegründung",
+        "Projektabgrenzung",
+        "Projektplanung",
+        "Analysephase",
+        "Entwurfsphase",
+        "Implementierungsphase oder Realisierungsphase",
+        "Test oder Qualitätssicherung",
+        "Abnahme oder Übergabe",
+        "Soll-Ist-Vergleich",
+        "Fazit oder Ausblick oder Lessons Learned"
+      ],
+      "rule": "Die Dokumentation muss die typischen Phasen eines IHK-Abschlussprojekts abbilden.",
+      "recommendation": "Fehlende Kapitel ergänzen oder vorhandene Inhalte eindeutig zuordnen."
+    },
+    {
+      "id": "STR-002",
+      "category": "CAT-02",
+      "name": "Logischer Projektverlauf",
+      "severity": "MAJOR",
+      "points": 3,
+      "rule": "Der rote Faden muss Problem -> Ziel -> Analyse -> Planung -> Entwurf -> Umsetzung -> Test -> Abnahme -> Fazit erkennbar machen.",
+      "recommendation": "Kapitel logisch sortieren und Übergänge zwischen Phasen erklären."
+    },
+    {
+      "id": "STR-003",
+      "category": "CAT-02",
+      "name": "Dokumentation statt Tätigkeitsliste",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Die Doku darf nicht nur chronologisch aufzählen, was gemacht wurde. Sie muss Entscheidungen, Alternativen, Begründungen und Ergebnisse erklären.",
+      "recommendation": "Bei jedem größeren Schritt ergänzen: Warum wurde so entschieden? Welche Alternative gab es? Welches Ergebnis entstand?"
+    },
+    {
+      "id": "PROJ-001",
+      "category": "CAT-03",
+      "name": "Projektziel prüfbar formuliert",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Das Projektziel muss konkret, überprüfbar und vom Problem ableitbar sein. Unklare Begriffe wie modern, einfach, schnell oder benutzerfreundlich müssen messbar erklärt werden.",
+      "recommendation": "Ziel mit messbaren Akzeptanzkriterien formulieren."
+    },
+    {
+      "id": "PROJ-002",
+      "category": "CAT-03",
+      "name": "Eigenleistung erkennbar",
+      "severity": "CRITICAL",
+      "points": 3,
+      "rule": "Es muss klar sein, welche Analysen, Entscheidungen, Entwürfe, Implementierungen, Tests und Dokumentationen vom Prüfling selbst stammen.",
+      "recommendation": "Eigenen Anteil in Analyse, Entwurf, Umsetzung und Test explizit darstellen."
+    },
+    {
+      "id": "PROJ-003",
+      "category": "CAT-03",
+      "name": "Projektabgrenzung vorhanden",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Die Dokumentation muss klar sagen, was Teil des Projekts ist und was nicht. Bestehende Systeme, Frameworks, Vorarbeiten und übernommener Code müssen abgegrenzt werden.",
+      "recommendation": "Projektabgrenzung mit In-Scope/Out-of-Scope ergänzen."
+    },
+    {
+      "id": "PROJ-004",
+      "category": "CAT-03",
+      "name": "Projekt passt zum Ausbildungsberuf",
+      "severity": "CRITICAL",
+      "points": 3,
+      "rule": "Bei FIAE muss ein angemessener Anteil an Analyse, Entwurf, Implementierung, Test und Dokumentation einer Softwarelösung erkennbar sein. Bei FISI muss ein angemessener Anteil an Analyse, Planung, Systemintegration, Konfiguration, Betrieb, Sicherheit, Test und Übergabe erkennbar sein.",
+      "recommendation": "Berufsbezogene Kernleistungen stärker herausarbeiten."
+    },
+    {
+      "id": "ANA-001",
+      "category": "CAT-04",
+      "name": "Ist-Analyse vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Die Ist-Analyse beschreibt den aktuellen Zustand, bestehende Systeme, Prozesse, Daten, Schwachstellen, Nutzerprobleme, technische Rahmenbedingungen und ggf. Kosten oder Performanceprobleme.",
+      "recommendation": "Ist-Zustand mit Systemen, Daten, Prozess, Schwachstellen und Nutzerperspektive ergänzen."
+    },
+    {
+      "id": "ANA-002",
+      "category": "CAT-04",
+      "name": "Soll-Zustand vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Die Soll-Analyse beschreibt den angestrebten Zustand, konkrete Verbesserungen, Zielkriterien und fachliche Erwartungen.",
+      "recommendation": "Soll-Zustand mit messbaren Kriterien ergänzen."
+    },
+    {
+      "id": "ANA-003",
+      "category": "CAT-04",
+      "name": "Funktionale Anforderungen vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Funktionale Anforderungen müssen beschreiben, was das System leisten soll. Sie müssen eindeutig, prüfbar und zum Projektziel passend sein.",
+      "recommendation": "Funktionale Anforderungen als prüfbare Liste oder Lastenheftauszug ergänzen."
+    },
+    {
+      "id": "ANA-004",
+      "category": "CAT-04",
+      "name": "Nichtfunktionale Anforderungen vorhanden",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Nichtfunktionale Anforderungen wie Sicherheit, Performance, Usability, Wartbarkeit, Skalierbarkeit, Datenschutz oder Zuverlässigkeit müssen projektbezogen behandelt werden.",
+      "recommendation": "Nichtfunktionale Anforderungen mit Messkriterien ergänzen."
+    },
+    {
+      "id": "ANA-005",
+      "category": "CAT-04",
+      "name": "Anforderungen priorisiert und validiert",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Anforderungen sollen priorisiert, mit Stakeholdern abgestimmt und im weiteren Projektverlauf berücksichtigt werden.",
+      "recommendation": "Priorisierung, Abstimmung und Änderungsmanagement ergänzen."
+    },
+    {
+      "id": "ANA-006",
+      "category": "CAT-04",
+      "name": "Traceability von Anforderungen",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Jede zentrale Anforderung muss später in Entwurf, Umsetzung und Test wieder auftauchen: Anforderung -> Entwurfsentscheidung -> Implementierung -> Testfall -> Abnahme.",
+      "recommendation": "Traceability-Matrix ergänzen."
+    },
+    {
+      "id": "PLAN-001",
+      "category": "CAT-05",
+      "name": "Grobe Zeitplanung vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Eine grobe Zeitplanung mit Projektphasen und Gesamtstunden muss vorhanden sein. Die Gesamtstunden müssen zur IHK-Vorgabe und zum Projektantrag passen.",
+      "recommendation": "Grobe Zeitplanung mit Phasen, Stunden und Summe ergänzen."
+    },
+    {
+      "id": "PLAN-002",
+      "category": "CAT-05",
+      "name": "Detaillierte Zeitplanung vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Die detaillierte Zeitplanung muss konkrete Tätigkeiten mit Stunden enthalten. Analyse, Entwurf, Implementierung, Test, Abnahme, Einführung und Dokumentation müssen nachvollziehbar aufgeteilt sein.",
+      "recommendation": "Detaillierte Zeitplanung nach Phasen und Tätigkeiten ergänzen."
+    },
+    {
+      "id": "PLAN-003",
+      "category": "CAT-05",
+      "name": "Ressourcenplanung vorhanden",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Menschliche, technische und organisatorische Ressourcen müssen aufgeführt werden: Personalrollen, Hardware, Software, Entwicklungsumgebung, Datenbank, Testwerkzeuge, Deploymentumgebung, Lizenzen und vorhandene Infrastruktur.",
+      "recommendation": "Ressourcenliste mit Rollen, Tools, Infrastruktur und Verfügbarkeit ergänzen."
+    },
+    {
+      "id": "PLAN-004",
+      "category": "CAT-05",
+      "name": "Kostenplanung vollständig",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Die Kostenplanung muss Personal-, Sach-, Lizenz-, Infrastruktur- und Gemeinkosten berücksichtigen. Vorhandene Ressourcen sind als vorhandene Infrastruktur oder anteilige Nutzung zu erklären.",
+      "recommendation": "Kostenplan mit Stundensätzen, Gemeinkosten, Sachkosten und Lizenzen ergänzen."
+    },
+    {
+      "id": "PLAN-005",
+      "category": "CAT-05",
+      "name": "Wirtschaftlichkeitsbetrachtung vorhanden",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Je nach Projekt müssen Make-or-Buy, Nutzwertanalyse, Kosten-Nutzen-Betrachtung oder Amortisationsrechnung vorhanden sein. Die Auswahl muss zum Projekt passen.",
+      "recommendation": "Wirtschaftlichkeitskapitel mit Methode, Annahmen und Ergebnis ergänzen."
+    },
+    {
+      "id": "PLAN-006",
+      "category": "CAT-05",
+      "name": "Risikobetrachtung vorhanden",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Technische, zeitliche, organisatorische, wirtschaftliche und ggf. rechtliche Risiken müssen erkennbar sein und mit Maßnahmen verbunden werden.",
+      "recommendation": "Risikoanalyse mit Eintrittswahrscheinlichkeit, Auswirkung und Maßnahme ergänzen."
+    },
+    {
+      "id": "PLAN-007",
+      "category": "CAT-05",
+      "name": "Vorgehensmodell begründet",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Das gewählte Vorgehensmodell, z. B. Wasserfall, iterativ, agil oder hybrid, muss genannt und passend zum Projekt begründet werden.",
+      "recommendation": "Vorgehensmodell mit Vor-/Nachteilen und Projektbezug ergänzen."
+    },
+    {
+      "id": "DES-001",
+      "category": "CAT-06",
+      "name": "Architektur beschrieben",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Die technische Architektur muss Komponenten, Schichten, Datenflüsse, Schnittstellen und zentrale technische Entscheidungen beschreiben.",
+      "recommendation": "Architekturkapitel mit Diagramm und Erklärung ergänzen."
+    },
+    {
+      "id": "DES-002",
+      "category": "CAT-06",
+      "name": "Architekturentscheidungen begründet",
+      "severity": "MAJOR",
+      "points": 2,
+      "rule": "Relevante Entscheidungen wie Framework, Programmiersprache, Datenbank, API-Stil, Deploymentform oder Sicherheitskonzept müssen begründet werden.",
+      "recommendation": "Technologieentscheidungen mit Alternativen und Begründung ergänzen."
+    },
+    {
+      "id": "DES-003",
+      "category": "CAT-06",
+      "name": "Datenmodell vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "applies_if": [
+        "strukturierte Daten",
+        "Datenbank",
+        "Dateipersistenz",
+        "API-Datenmodell"
+      ],
+      "rule": "Es muss ein Datenmodell vorhanden sein. Bei relationalen Datenbanken: ER-Modell, Tabellenmodell, Primär-/Fremdschlüssel, Beziehungen und ggf. Normalisierung. Bei Dateiformaten: Struktur, Felder, Datentypen und Validierungen.",
+      "recommendation": "Datenmodell oder Datenstruktur mit Beziehungen und Validierungen ergänzen."
+    },
+    {
+      "id": "DES-004",
+      "category": "CAT-06",
+      "name": "Schnittstellen beschrieben",
+      "severity": "MAJOR",
+      "points": 2,
+      "applies_if": [
+        "API",
+        "externe Systeme",
+        "Frontend-Backend-Trennung"
+      ],
+      "rule": "Schnittstellen müssen Datenformate, Endpunkte, Methoden, Statuscodes, Authentifizierung, Fehlerverhalten und Versionierung beschreiben.",
+      "recommendation": "API-/Schnittstellendokumentation ergänzen."
+    },
+    {
+      "id": "DES-005",
+      "category": "CAT-06",
+      "name": "UI/UX-Konzept vorhanden",
+      "severity": "MAJOR",
+      "points": 1,
+      "applies_if": [
+        "Benutzeroberfläche"
+      ],
+      "rule": "Die Oberfläche muss fachlich begründet werden: Zielgruppe, Masken, Benutzerführung, Validierung, Fehlermeldungen, Barrierefreiheit oder Usability.",
+      "recommendation": "UI-Konzept mit Wireframe/Mockup und Nutzerbezug ergänzen."
+    },
+    {
+      "id": "DES-006",
+      "category": "CAT-06",
+      "name": "Geschäftslogik / Algorithmik beschrieben",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Die zentrale Geschäftslogik muss verständlich beschrieben werden. Bei komplexen Abläufen sind Pseudocode, PAP, Aktivitätsdiagramm, Sequenzdiagramm oder Klassendiagramm sinnvoll.",
+      "recommendation": "Kernlogik fachlich und technisch erklären und ggf. diagrammatisch darstellen."
+    },
+    {
+      "id": "DES-007",
+      "category": "CAT-06",
+      "name": "Sicherheitskonzept berücksichtigt",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Sicherheitsaspekte wie Rollen/Rechte, Eingabevalidierung, Datenschutz, SQL-Injection, XSS, CSRF, Passwortschutz, Logging oder Backup müssen, sofern relevant, behandelt werden.",
+      "recommendation": "Sicherheitsmaßnahmen und Verantwortlichkeiten ergänzen."
+    },
+    {
+      "id": "IMPL-001",
+      "category": "CAT-07",
+      "name": "Umsetzung nachvollziehbar",
+      "severity": "CRITICAL",
+      "points": 3,
+      "rule": "Die Implementierung muss erklären, wie die geplante Lösung umgesetzt wurde. Reine Screenshots oder Quelltext ohne Erklärung reichen nicht aus.",
+      "recommendation": "Umsetzungsschritte mit Bezug zu Entwurf und Anforderungen beschreiben."
+    },
+    {
+      "id": "IMPL-002",
+      "category": "CAT-07",
+      "name": "Eigenentwickelte Teile sichtbar",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Eigene Module, Klassen, Funktionen, Skripte, Konfigurationen oder technische Entscheidungen müssen sichtbar beschrieben sein.",
+      "recommendation": "Eigene Implementierungsanteile und Kernfunktionen hervorheben."
+    },
+    {
+      "id": "IMPL-003",
+      "category": "CAT-07",
+      "name": "Codeauszüge sinnvoll",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Codeauszüge sollen nur relevante Kernlogik zeigen und erklärt werden. Vollständige Quellcodes gehören in den Anhang oder auf ein separates Medium.",
+      "recommendation": "Codeauszüge kürzen, beschriften und fachlich erklären."
+    },
+    {
+      "id": "IMPL-004",
+      "category": "CAT-07",
+      "name": "Fehlerbehandlung und Validierung beschrieben",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Die Dokumentation muss zeigen, wie fehlerhafte Eingaben, technische Fehler, Ausnahmen, Berechtigungsprobleme oder ungültige Daten behandelt werden.",
+      "recommendation": "Validierungs- und Fehlerkonzept ergänzen."
+    },
+    {
+      "id": "IMPL-005",
+      "category": "CAT-07",
+      "name": "Deployment / Einführung beschrieben",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Installation, Konfiguration, Migration, Deployment, Übergabe, Schulung oder Betriebsstart müssen nachvollziehbar beschrieben werden.",
+      "recommendation": "Einführungs- und Übergabekapitel ergänzen."
+    },
+    {
+      "id": "IMPL-006",
+      "category": "CAT-07",
+      "name": "Versions- und Änderungsbezug",
+      "severity": "MINOR",
+      "points": 1,
+      "rule": "Bei relevanten Änderungen, Abweichungen oder iterativer Entwicklung muss dokumentiert sein, warum angepasst wurde und welche Auswirkung dies hatte.",
+      "recommendation": "Änderungen und deren Auswirkungen beschreiben."
+    },
+    {
+      "id": "IMPL-007",
+      "category": "CAT-07",
+      "name": "Betrieb / Wartung berücksichtigt",
+      "severity": "MINOR",
+      "points": 1,
+      "rule": "Bei produktiven Systemen sollen Wartung, Backup, Recovery, Monitoring, Rollen oder Verantwortlichkeiten mindestens kurz erwähnt werden.",
+      "recommendation": "Betriebs- und Wartungshinweise ergänzen."
+    },
+    {
+      "id": "TEST-001",
+      "category": "CAT-08",
+      "name": "Testkonzept vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Es muss erkennbar sein, welche Teststrategie verfolgt wurde: manuell, automatisiert, Unit-Test, Integrationstest, Systemtest, Abnahmetest, Usability-Test, Sicherheitstest oder statische Prüfung.",
+      "recommendation": "Teststrategie mit Testarten und Ziel ergänzen."
+    },
+    {
+      "id": "TEST-002",
+      "category": "CAT-08",
+      "name": "Testfälle vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Testfälle müssen mindestens Vorbedingung, Eingabe, erwartetes Ergebnis, tatsächliches Ergebnis und Status enthalten.",
+      "recommendation": "Testfalltabelle mit erwarteten und tatsächlichen Ergebnissen ergänzen."
+    },
+    {
+      "id": "TEST-003",
+      "category": "CAT-08",
+      "name": "Anforderungen mit Tests verknüpft",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Zentrale Anforderungen müssen durch passende Tests abgedeckt sein. Das Tool prüft Anforderungen ohne Test und Tests ohne Bezug zu Anforderungen.",
+      "recommendation": "Testmatrix: Anforderung -> Testfall -> Ergebnis -> Status ergänzen."
+    },
+    {
+      "id": "TEST-004",
+      "category": "CAT-08",
+      "name": "Testdaten und Grenzfälle",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Testdaten, Grenzwerte, Äquivalenzklassen, Negativtests und Fehlerfälle müssen bei datenverarbeitenden Anwendungen berücksichtigt werden.",
+      "recommendation": "Grenzwertanalyse, Äquivalenzklassen und Negativtests ergänzen."
+    },
+    {
+      "id": "TEST-005",
+      "category": "CAT-08",
+      "name": "Testergebnisse dokumentiert",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Ergebnisse müssen so dokumentiert sein, dass Fehler reproduzierbar sind. Fehlerbehebungen und erneute Tests müssen erkennbar sein.",
+      "recommendation": "Testergebnisse, Fehlernummern und Retests dokumentieren."
+    },
+    {
+      "id": "TEST-006",
+      "category": "CAT-08",
+      "name": "Qualitätsmaßnahmen über Tests hinaus",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Das Tool prüft auf Code-Review, statische Analyse, Linting, Sicherheitsprüfung, Walkthrough, Review, Abnahmegespräch oder Benutzerfeedback.",
+      "recommendation": "QS-Maßnahmen neben Funktionstests ergänzen."
+    },
+    {
+      "id": "TEST-007",
+      "category": "CAT-08",
+      "name": "Abnahme vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Es muss dokumentiert sein, ob und wie das Projektergebnis abgenommen wurde: Auftraggeber, Fachabteilung, Kunde, Ausbilder oder Projektverantwortlicher.",
+      "recommendation": "Abnahmekapitel mit Beteiligten, Kriterien und Ergebnis ergänzen."
+    },
+    {
+      "id": "TEST-008",
+      "category": "CAT-08",
+      "name": "Traceability im Test",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Testfälle müssen auf Anforderungen, Akzeptanzkriterien oder Risikoaspekte zurückführbar sein.",
+      "recommendation": "Traceability-Tabelle oder Testabdeckung ergänzen."
+    },
+    {
+      "id": "END-001",
+      "category": "CAT-09",
+      "name": "Soll-Ist-Vergleich vorhanden",
+      "severity": "CRITICAL",
+      "points": 2,
+      "rule": "Der Soll-Ist-Vergleich muss fachlich und zeitlich erfolgen: geplante Ziele vs. erreichte Ergebnisse, geplante Zeiten vs. tatsächliche Zeiten, geplante Kosten vs. tatsächliche Kosten, sofern möglich.",
+      "recommendation": "Soll-Ist-Vergleich mit Ziel-, Zeit- und Kostenbezug ergänzen."
+    },
+    {
+      "id": "END-002",
+      "category": "CAT-09",
+      "name": "Abweichungen erklärt",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Zeit-, Kosten-, Funktions- oder Inhaltsabweichungen müssen erklärt und bewertet werden.",
+      "recommendation": "Abweichungen mit Ursache und Auswirkung beschreiben."
+    },
+    {
+      "id": "END-003",
+      "category": "CAT-09",
+      "name": "Lessons Learned",
+      "severity": "MAJOR",
+      "points": 1,
+      "rule": "Die Dokumentation muss zeigen, was fachlich, technisch oder organisatorisch gelernt wurde. Reine Floskeln ohne Projektbezug werden nicht gewertet.",
+      "recommendation": "Lessons Learned projektbezogen und kritisch formulieren."
+    },
+    {
+      "id": "END-004",
+      "category": "CAT-09",
+      "name": "Ausblick sinnvoll",
+      "severity": "MINOR",
+      "points": 1,
+      "rule": "Der Ausblick soll realistische Erweiterungen, Wartung, Folgeprojekte, Optimierungen oder technische Grenzen nennen.",
+      "recommendation": "Realistischen fachlichen und technischen Ausblick ergänzen."
+    },
+    {
+      "id": "LANG-001",
+      "category": "CAT-10",
+      "name": "Fachsprache verständlich",
+      "severity": "MINOR",
+      "points": 0.5,
+      "rule": "Die Dokumentation soll fachlich formuliert sein, aber so verständlich, dass ein IT-Prüfungsausschuss ohne internes Firmenwissen folgen kann.",
+      "recommendation": "Betriebsinterne Begriffe erklären und Fachsprache präzisieren."
+    },
+    {
+      "id": "LANG-002",
+      "category": "CAT-10",
+      "name": "Abkürzungen erklärt",
+      "severity": "MINOR",
+      "points": 0.5,
+      "rule": "Abkürzungen müssen beim ersten Auftreten ausgeschrieben oder im Abkürzungsverzeichnis erklärt werden.",
+      "recommendation": "Abkürzungen ergänzen oder beim ersten Auftreten ausschreiben."
+    },
+    {
+      "id": "LANG-003",
+      "category": "CAT-10",
+      "name": "Quellen korrekt",
+      "severity": "CRITICAL",
+      "points": 0.5,
+      "rule": "Externe Quellen, Normen, Webseiten, Bibliotheken, Bilder, Tabellen, Codeauszüge und KI-Hilfsmittel müssen gemäß IHK-Profil angegeben werden.",
+      "recommendation": "Quellenverzeichnis, Bildquellen, Bibliotheken und Hilfsmittel ergänzen."
+    },
+    {
+      "id": "LANG-004",
+      "category": "CAT-10",
+      "name": "Verweise konsistent",
+      "severity": "MAJOR",
+      "points": 0.5,
+      "rule": "Abbildungen, Tabellen, Listings, Kapitel und Anhänge müssen korrekt nummeriert und aus dem Text heraus referenziert sein.",
+      "recommendation": "Querverweise und Verzeichnisse aktualisieren."
+    }
+  ],
+  "red_flags": [
+    {
+      "id": "RF-001",
+      "pattern": "viele Schlagwörter, wenig Begründung",
+      "message": "Die Doku nennt Technik, erklärt aber nicht, warum diese Technik gewählt wurde."
+    },
+    {
+      "id": "RF-002",
+      "pattern": "keine Tests zu Kernanforderungen",
+      "message": "Zentrale Anforderungen sind nicht durch Testfälle abgesichert."
+    },
+    {
+      "id": "RF-003",
+      "pattern": "Anhang ohne Textbezug",
+      "message": "Anhänge wirken wie Füllmaterial und sind nicht in den Projektverlauf eingebunden."
+    },
+    {
+      "id": "RF-004",
+      "pattern": "Screenshots statt Erklärung",
+      "message": "Screenshots ersetzen keine fachliche Beschreibung."
+    },
+    {
+      "id": "RF-005",
+      "pattern": "nur Installation, keine Entscheidung",
+      "message": "Die Eigenleistung ist zu gering oder nicht ausreichend begründet."
+    },
+    {
+      "id": "RF-006",
+      "pattern": "unrealistische Zeitplanung",
+      "message": "Zeitansätze passen nicht zum Umfang oder zur IHK-Stundenvorgabe."
+    },
+    {
+      "id": "RF-007",
+      "pattern": "Wirtschaftlichkeit ohne Zahlen",
+      "message": "Wirtschaftlichkeit wird behauptet, aber nicht berechnet oder plausibel hergeleitet."
+    },
+    {
+      "id": "RF-008",
+      "pattern": "KI- oder Fremdtextverdacht",
+      "message": "Stilbruch, unpassende Begriffe oder fehlende Quellen können auf nicht gekennzeichnete Hilfsmittel hinweisen."
+    },
+    {
+      "id": "RF-009",
+      "pattern": "Tabellen-/Abbildungsnummern doppelt",
+      "message": "Verzeichnisse oder Nummerierungen sind fehlerhaft."
+    },
+    {
+      "id": "RF-010",
+      "pattern": "genehmigter Antrag nicht abgeglichen",
+      "message": "Die Doku muss gegen den Projektantrag geprüft werden."
+    }
+  ],
+  "output_schema": {
+    "gesamtbewertung": {
+      "punkte": "number",
+      "note_text": "string",
+      "risiko": "niedrig|mittel|hoch|sehr hoch",
+      "kurzfazit": "string"
+    },
+    "kategorien": [
+      {
+        "id": "string",
+        "name": "string",
+        "punkte": "number",
+        "max_punkte": "number",
+        "status": "erfüllt|teilweise erfüllt|nicht erfüllt|nicht anwendbar"
+      }
+    ],
+    "findings": [
+      {
+        "id": "string",
+        "severity": "BLOCKER|CRITICAL|MAJOR|MINOR|INFO|BONUS",
+        "titel": "string",
+        "fundstelle": "string",
+        "beschreibung": "string",
+        "empfehlung": "string"
+      }
+    ],
+    "ko_kriterien": {
+      "bestanden": "boolean",
+      "blocker": [
+        "string"
+      ]
+    },
+    "verbesserung_priorisiert": [
+      "string"
+    ]
+  },
+  "evaluation_flow": [
+    "IHK-Profil laden",
+    "Dokument und optional Projektantrag extrahieren",
+    "Beruf und Projekttyp erkennen",
+    "KO-Kriterien prüfen",
+    "Formale Mindestanforderungen prüfen",
+    "Pflichtkapitel und roten Faden prüfen",
+    "Fachliche Tiefe je Kapitel prüfen",
+    "Traceability prüfen: Antrag -> Ziel -> Anforderungen -> Entwurf -> Umsetzung -> Test -> Abnahme -> Fazit",
+    "Wirtschaftlichkeit prüfen: Ressourcen -> Kosten -> Nutzen -> Amortisation/Nutzwert",
+    "Konsistenz prüfen: Zeiten, Kosten, Verweise, Nummerierungen, Anhänge, Quellen",
+    "Punktzahl, Risiko, Findings und priorisierte Nachbesserungen erzeugen"
+  ]
+}

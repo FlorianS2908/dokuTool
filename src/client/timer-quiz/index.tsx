@@ -5,5 +5,6 @@ import { TimerQuizApp } from './TimerQuizApp';
 const rootElement = document.querySelector('#timerQuizRoot');
 
 if (rootElement) {
-  createRoot(rootElement).render(<TimerQuizApp />);
+  const initialArea = rootElement.getAttribute('data-timer-quiz-area') || 'software';
+  createRoot(rootElement).render(<TimerQuizApp initialArea={initialArea as 'software' | 'sql' | 'python'} />);
 }
