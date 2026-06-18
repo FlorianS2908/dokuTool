@@ -1,9 +1,14 @@
 import { readFileSync } from 'node:fs';
 
 const rulesetUrl = new URL('./rulesets/ihk_abschlussprojekt_ruleset_v1.json', import.meta.url);
+const kostenRessourcenRulesetUrl = new URL('./rulesets/kosten_ressourcen_rules_v3.json', import.meta.url);
 
 export const IHK_ABSCHLUSSPROJEKT_RULESET = JSON.parse(
   readFileSync(rulesetUrl, 'utf8').replace(/^\uFEFF/, '')
+);
+
+export const KOSTEN_RESSOURCEN_RULESET_V3 = JSON.parse(
+  readFileSync(kostenRessourcenRulesetUrl, 'utf8').replace(/^\uFEFF/, '')
 );
 
 const statusScore = { gruen: 1, gelb: 0.55, rot: 0, grau: 0.35 };
@@ -664,6 +669,388 @@ function evaluateRedFlags(context) {
     }));
 }
 
+const COST_RESOURCE_CHECKS = {
+  resources: [
+    { label: 'Personal/Rollen', patterns: [/personal|rolle|rollen|entwickler|projektleiter|auftraggeber|stakeholder|fachabteilung|ausbilder/i] },
+    { label: 'Hardware/Arbeitsplatz/Infrastruktur', patterns: [/hardware|arbeitsplatz|notebook|pc|server|infrastruktur|netzwerk|arbeitsmittel/i] },
+    { label: 'Software/Entwicklungswerkzeuge', patterns: [/software|entwicklungsumgebung|entwicklungswerkzeug|ide|visual studio|vs code|intellij|tool|framework|bibliothek/i] },
+    { label: 'Lizenzkosten', patterns: [/lizenz|lizenzkosten|subscription|abo|kostenpflichtig|drittanbieter/i] },
+    { label: 'Daten/Datenquellen/Testdaten', patterns: [/datenquelle|testdaten|datensatz|datenbank|csv|json|xml|import|export|migration/i] },
+    { label: 'Testressourcen/Testumgebung', patterns: [/testumgebung|testressource|testsystem|qa|qualitaetssicherung|unit[-\s]?test|integrationstest|abnahmetest/i] },
+    { label: 'Hosting/Deployment/Betrieb', patterns: [/hosting|deployment|betrieb|produktivsystem|staging|cloud|docker|server|release|rollout/i] },
+    { label: 'Sicherheit/Datenschutz/Backup', patterns: [/sicherheit|datenschutz|dsgvo|backup|rechte|rollen|authentifizierung|autorisierung|verschluesselung/i] },
+    { label: 'Dokumentation/Schulung/Abnahme', patterns: [/dokumentation|schulung|uebergabe|uebergabe|abnahme|einweisung|benutzerhandbuch|betriebsdokumentation/i] },
+    { label: 'rechtliche/administrative Ressourcen', patterns: [/rechtlich|administrativ|freigabe|compliance|vertrag|betriebsrat|datenschutzbeauftragter|genehmigung/i] }
+  ],
+  costFields: [
+    { label: 'Bezeichnung/Kategorie', patterns: [/bezeichnung|kategorie|kostenart|kostenposition|ressource/i] },
+    { label: 'Menge/Anzahl/Stunden', patterns: [/menge|anzahl|stunden|\b\d+(?:[,.]\d+)?\s*h\b|personentag|pt\b/i] },
+    { label: 'Einzelkosten/Stundensatz', patterns: [/einzelkosten|stundensatz|satz|preis\s+pro|kosten\s+pro|eur\s*\/\s*h|euro\s*\/\s*h/i] },
+    { label: 'Gesamtkosten', patterns: [/gesamtkosten|summe|gesamtbetrag|total|kosten\s+gesamt/i] },
+    { label: 'Begruendung/Bemerkung', patterns: [/begruendung|bemerkung|annahme|grundlage|kalkulation|herleitung|nachvollziehbar/i] }
+  ],
+  projectFit: [
+    { label: 'Projektziel', patterns: [/projektziel|zielsetzung|ziel\s+des\s+projekts|soll[-\s]?zustand/i] },
+    { label: 'Anforderungen', patterns: [/anforderung|akzeptanzkriter|lastenheft|pflichtenheft|funktionale|nichtfunktionale/i] },
+    { label: 'Technikstack', patterns: [/technologie|tech[-\s]?stack|framework|programmiersprache|datenbank|api|frontend|backend|server/i] },
+    { label: 'Umsetzung', patterns: [/implementierung|realisierung|umsetzung|entwicklung|konfiguration/i] },
+    { label: 'Test', patterns: [/test|testfall|testergebnis|qualitaetssicherung|abnahmetest/i] },
+    { label: 'Deployment/Dokumentation', patterns: [/deployment|betrieb|hosting|dokumentation|uebergabe|abnahme/i] }
+  ],
+  personalCosts: [
+    { label: 'Rollen', patterns: [/rolle|rollen|entwickler|projektleiter|auftraggeber|fachabteilung|tester/i] },
+    { label: 'Stunden', patterns: [/stunden|\b\d+(?:[,.]\d+)?\s*h\b|aufwand|personentag|pt\b/i] },
+    { label: 'Stundensatz', patterns: [/stundensatz|eur\s*\/\s*h|euro\s*\/\s*h|kostensatz|tagessatz/i] },
+    { label: 'Berechnungslogik', patterns: [/berechnung|kalkulation|formel|summe|gesamt|annahme|grundlage/i] }
+  ],
+  traceability: [
+    { label: 'Ressource', patterns: [/ressource|ressourcenplanung|personal|hardware|software|lizenz|testumgebung/i] },
+    { label: 'Kostenposition', patterns: [/kostenposition|kostenplanung|personalkosten|sachkosten|lizenzkosten|gemeinkosten/i] },
+    { label: 'Projektphase', patterns: [/projektphase|analysephase|entwurfsphase|implementierungsphase|testphase|abnahmephase/i] },
+    { label: 'Nachweisstelle', patterns: [/nachweis|referenz|siehe|vgl\.|matrix|zuordnung|traceability/i] }
+  ],
+  outputReadiness: [
+    { label: 'Vollstaendigkeitsstatus', patterns: [/vollstaendig|vollstaendigkeit|ressourcenplanung|ressourcenliste|ressourcenkatalog/i] },
+    { label: 'fehlende Ressourcen', patterns: [/fehlende\s+ressource|nicht\s+vorhanden|offen|unklar|nachreichen|ergaenzen/i] },
+    { label: 'Kosten-Findings', patterns: [/kostenfinding|kosten[-\s]?finding|kostenplanung|gemeinkosten|stundensatz|gesamtkosten/i] },
+    { label: 'Konsistenzmatrix', patterns: [/konsistenzmatrix|traceability|zuordnung|ressource.*kosten|kosten.*phase|matrix/i] }
+  ]
+};
+
+const PROJECT_TYPE_RESOURCE_CHECKS = [
+  {
+    label: 'Web-/CRUD-Anwendung',
+    detectors: [/webanwendung|crud|formular|frontend|backend|benutzeroberflaeche|oberflaeche/i],
+    resources: [
+      { label: 'Frontend/UI', patterns: [/frontend|ui|oberflaeche|oberflaeche|formular|maske/i] },
+      { label: 'Backend/API', patterns: [/backend|api|server|endpoint|controller|service/i] },
+      { label: 'Datenbank/Persistenz', patterns: [/datenbank|persistenz|repository|sql|tabelle|schema/i] },
+      { label: 'Test/Deployment', patterns: [/test|deployment|hosting|betrieb|staging/i] }
+    ]
+  },
+  {
+    label: 'Datenbank-/Datenmigrationsprojekt',
+    detectors: [/datenmigration|migration|datenbank|import|export|etl|csv|sql/i],
+    resources: [
+      { label: 'Quelldaten/Zieldaten', patterns: [/quelldaten|zieldaten|datenquelle|datenbestand|datensatz/i] },
+      { label: 'Import/Validierung', patterns: [/import|validierung|mapping|transformation|bereinigung/i] },
+      { label: 'Datenbank/Schema', patterns: [/datenbank|schema|tabelle|sql|relation/i] },
+      { label: 'Testdaten', patterns: [/testdaten|testfall|stichprobe|datenqualitaet/i] }
+    ]
+  },
+  {
+    label: 'API-Projekt',
+    detectors: [/\bapi\b|rest|graphql|endpoint|schnittstelle|request|response/i],
+    resources: [
+      { label: 'Endpunkte/Methoden', patterns: [/endpoint|route|get|post|put|delete|methode/i] },
+      { label: 'Auth/Sicherheit', patterns: [/authentifizierung|autorisierung|token|oauth|jwt|rechte/i] },
+      { label: 'Statuscodes/Fehler', patterns: [/statuscode|http[-\s]?status|fehler|exception|error/i] },
+      { label: 'API-Test', patterns: [/postman|integrationstest|api[-\s]?test|testfall|request/i] }
+    ]
+  },
+  {
+    label: 'KI-/Automatisierungsprojekt',
+    detectors: [/\bki\b|kuenstliche intelligenz|ai\b|machine learning|automatisierung|prompt|modell/i],
+    resources: [
+      { label: 'Modell/Prompt', patterns: [/modell|prompt|llm|openai|ki[-\s]?modell|training/i] },
+      { label: 'Daten/Datenschutz', patterns: [/daten|datenschutz|dsgvo|anonymisierung|personenbezogen/i] },
+      { label: 'Evaluation', patterns: [/evaluation|qualitaetsmessung|trefferquote|validierung|benchmark/i] },
+      { label: 'Betrieb/Monitoring', patterns: [/betrieb|monitoring|deployment|logging|kontrolle/i] }
+    ]
+  },
+  {
+    label: 'Systemintegrationsprojekt',
+    detectors: [/systemintegration|server|netzwerk|firewall|backup|monitoring|virtualisierung|infrastruktur/i],
+    resources: [
+      { label: 'Server/Netzwerk', patterns: [/server|netzwerk|switch|router|firewall|vm|virtualisierung/i] },
+      { label: 'Security/Backup', patterns: [/sicherheit|backup|rechte|rollen|hardening|datenschutz/i] },
+      { label: 'Monitoring/Betrieb', patterns: [/monitoring|betrieb|wartung|verfuegbarkeit|sla|logging/i] },
+      { label: 'Test/Abnahme', patterns: [/test|abnahme|funktionstest|lasttest|protokoll/i] }
+    ]
+  }
+];
+
+function costResourceWeight(rule) {
+  if (rule.severity === 'CRITICAL') return 1.3;
+  if (rule.severity === 'MAJOR') return 1;
+  return 0.45;
+}
+
+function costResourceResult(rule, status, assessment, evidence, reason, recommendation, weight = costResourceWeight(rule)) {
+  return {
+    category: `Ruleset v3 · ${rule.category || 'Kosten/Ressourcen'}`,
+    criterion: `${rule.id} ${rule.name}`,
+    status,
+    assessment,
+    evidence: evidence || '-',
+    reason,
+    recommendation: recommendation || 'Kosten- und Ressourcenplanung gegen das erweiterte Ruleset v3 manuell nachschaerfen.',
+    severity: severity(rule),
+    weight,
+    ruleset: {
+      id: rule.id,
+      version: KOSTEN_RESSOURCEN_RULESET_V3.version,
+      category: rule.category,
+      severity: rule.severity,
+      kostenRessourcen: true
+    }
+  };
+}
+
+function evaluateCostChecks(rule, context, checks, minMatches, recommendation, weight) {
+  const labels = matchedLabels(context.text, checks);
+  const missing = checks.map((check) => check.label).filter((label) => !labels.includes(label));
+  const partial = Math.max(1, Math.ceil(minMatches * 0.5));
+
+  if (labels.length >= minMatches) {
+    return costResourceResult(
+      rule,
+      'gruen',
+      'erfuellt',
+      `${labels.length}/${checks.length} Merkmale erkannt: ${labels.join(', ')}`,
+      'Die v3-Anforderung wurde anhand der extrahierten Dokumentation ausreichend nachgewiesen.',
+      recommendation,
+      weight
+    );
+  }
+
+  if (labels.length >= partial) {
+    return costResourceResult(
+      rule,
+      'gelb',
+      'teilweise erkannt',
+      `Erkannt: ${labels.join(', ') || '-'}. Fehlt/unklar: ${missing.join(', ') || '-'}.`,
+      'Die v3-Anforderung ist teilweise vorhanden, aber nicht vollstaendig oder nicht klar genug belegt.',
+      recommendation,
+      weight
+    );
+  }
+
+  return costResourceResult(
+    rule,
+    missingStatus(rule),
+    'nicht ausreichend erkannt',
+    `Fehlt/unklar: ${missing.join(', ') || rule.name}.`,
+    'Die v3-Anforderung wurde im extrahierten Text nicht belastbar erkannt.',
+    recommendation,
+    weight
+  );
+}
+
+function detectProjectType(context) {
+  const ranked = PROJECT_TYPE_RESOURCE_CHECKS
+    .map((type) => ({
+      ...type,
+      detectorHits: type.detectors.filter((pattern) => pattern.test(context.text)).length
+    }))
+    .sort((a, b) => b.detectorHits - a.detectorHits);
+
+  return ranked[0]?.detectorHits ? ranked[0] : null;
+}
+
+function evaluateProjectTypeMinimums(rule, context) {
+  const projectType = detectProjectType(context);
+  if (!projectType) {
+    return costResourceResult(
+      rule,
+      'grau',
+      'Projektart nicht sicher erkannt',
+      '-',
+      'Die Projektart konnte aus dem extrahierten Text nicht sicher genug bestimmt werden.',
+      'Projektart im Dokument klar benennen, damit projektartspezifische Ressourcen geprueft werden koennen.',
+      0.45
+    );
+  }
+
+  const labels = matchedLabels(context.text, projectType.resources);
+  const missing = projectType.resources.map((check) => check.label).filter((label) => !labels.includes(label));
+  if (labels.length >= Math.ceil(projectType.resources.length * 0.75)) {
+    return costResourceResult(
+      rule,
+      'gruen',
+      `${projectType.label} plausibel abgedeckt`,
+      `Projektart: ${projectType.label}. Erkannt: ${labels.join(', ')}.`,
+      'Die erwartbaren Mindestressourcen der erkannten Projektart sind weitgehend nachvollziehbar.',
+      'Keine unmittelbare Nacharbeit, sofern die Ressourcen im Kostenplan ebenfalls auftauchen.'
+    );
+  }
+
+  return costResourceResult(
+    rule,
+    labels.length >= 2 ? 'gelb' : 'rot',
+    `${projectType.label} unvollstaendig abgedeckt`,
+    `Projektart: ${projectType.label}. Erkannt: ${labels.join(', ') || '-'}. Fehlt/unklar: ${missing.join(', ') || '-'}.`,
+    'Die erkannten Ressourcen passen noch nicht vollstaendig zur Projektart.',
+    'Projektart-spezifische Mindestressourcen in Ressourcen- und Kostenplanung ergaenzen.'
+  );
+}
+
+function evaluateKostenRessourcenRule(rule, context) {
+  switch (rule.id) {
+    case 'CR-001':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.resources,
+        7,
+        'Ressourcenplanung um fehlende Kategorien wie Testumgebung, Deployment, Sicherheit, Dokumentation oder administrative Ressourcen ergaenzen.'
+      );
+    case 'CR-002':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.projectFit,
+        4,
+        'Ressourcen sichtbar mit Projektziel, Anforderungen, Technikstack, Umsetzung, Tests und Deployment verknuepfen.'
+      );
+    case 'CR-003':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.costFields,
+        4,
+        'Kostenplanung tabellarisch mit Bezeichnung, Kategorie, Menge/Stunden, Einzelkosten/Stundensatz, Gesamtkosten und Begruendung ausweisen.'
+      );
+    case 'CR-004':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.personalCosts,
+        3,
+        'Personalkosten mit Rollen, Stunden, Stundensaetzen und Berechnungslogik nachvollziehbar machen.'
+      );
+    case 'CR-005': {
+      const hasCosts = /kostenplanung|personalkosten|sachkosten|lizenzkosten|gesamtkosten|stundensatz|wirtschaftlichkeit/i.test(context.text);
+      const hasOverhead = /gemeinkosten|overhead|verwaltungskosten|pauschale|einzelaufschluesselung|einzelaufschlüsselung|in\s+den\s+stundensaetzen\s+enthalten|in\s+stundensatz\s+enthalten/i.test(context.text);
+      if (hasOverhead) {
+        return costResourceResult(rule, 'gruen', 'Gemeinkostenmodell erkannt', firstEvidence(context.text, [/gemeinkosten|overhead|verwaltungskosten|pauschale|einzelaufschluesselung|einzelaufschlüsselung|in\s+den\s+stundensaetzen\s+enthalten|in\s+stundensatz\s+enthalten/i], 'Gemeinkosten'), 'Gemeinkosten oder ein Modell fuer enthaltene Gemeinkosten wurden erkannt.', 'Gemeinkostenmodell beibehalten und rechnerisch nachvollziehbar machen.');
+      }
+      return costResourceResult(
+        rule,
+        hasCosts ? 'rot' : 'grau',
+        hasCosts ? 'Gemeinkosten fehlen/unklar' : 'Kostenplanung nicht sicher erkannt',
+        hasCosts ? 'Kostenbegriffe erkannt, aber keine Gemeinkosten oder kein Modell fuer enthaltene Gemeinkosten.' : '-',
+        hasCosts ? 'Bei vorhandener Kostenplanung verlangt das v3-Ruleset einen Gemeinkostenbezug.' : 'Ohne sicher erkannte Kostenplanung kann Gemeinkostenbezug nicht belastbar bewertet werden.',
+        'Gemeinkosten als Pauschale, Einzelaufschluesselung oder explizit im Stundensatz enthalten ausweisen.'
+      );
+    }
+    case 'CR-006': {
+      const hasZero = /\b0\s*(?:eur|euro|€)|kostenlos|ohne\s+kosten|freie\s+software|open[-\s]?source|vorhandene\s+(?:infrastruktur|lizenz|hardware|software)|bestehende\s+lizenz/i.test(context.text);
+      const hasReason = /begruendung|grund|weil|da\s+bereits|vorhanden|bestehend|freie\s+software|open[-\s]?source|lizenz\s+bereits|infrastruktur\s+bereits/i.test(context.text);
+      if (!hasZero) {
+        return costResourceResult(rule, 'grau', 'keine 0-Euro-Position erkannt', '-', 'Im extrahierten Text wurde keine explizite 0-Euro- oder vorhandene Ressource gefunden.', 'Falls Ressourcen kostenlos angesetzt werden, diese trotzdem kurz begruenden.', 0.45);
+      }
+      return costResourceResult(
+        rule,
+        hasReason ? 'gruen' : 'gelb',
+        hasReason ? '0-Euro-Begruendung plausibel' : '0-Euro-Begruendung fehlt/unklar',
+        firstEvidence(context.text, [/\b0\s*(?:eur|euro|€)|kostenlos|ohne\s+kosten|freie\s+software|open[-\s]?source|vorhandene\s+(?:infrastruktur|lizenz|hardware|software)|bestehende\s+lizenz/i], '0-Euro/Bestand'),
+        hasReason ? 'Kostenlose oder vorhandene Ressourcen werden begruendet.' : 'Kostenlose oder vorhandene Ressourcen wurden erkannt, aber nicht ausreichend begruendet.',
+        '0-Euro-Positionen mit vorhandener Infrastruktur, freier Software oder bestehender Lizenz begruenden.'
+      );
+    }
+    case 'CR-007':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.traceability,
+        3,
+        'Ressourcen, Kostenpositionen, Projektphasen und Nachweisstellen in einer Matrix oder klaren Zuordnung verbinden.'
+      );
+    case 'CR-008': {
+      const checks = [
+        { label: 'Zeitplanung', patterns: [/zeitplanung|projektphase|arbeitspaket|meilenstein|\b\d+(?:[,.]\d+)?\s*h\b/i] },
+        { label: 'Personalkosten', patterns: [/personalkosten|stundensatz|kostensatz|lohn|gehalt/i] },
+        { label: 'Rollen', patterns: [/rolle|rollen|entwickler|projektleiter|tester|auftraggeber/i] },
+        { label: 'Stundenabgleich', patterns: [/gesamtstunden|summe|abweichung|soll[-\s]?ist|stunden.*kosten|kosten.*stunden/i] }
+      ];
+      return evaluateCostChecks(rule, context, checks, 3, 'Stunden aus Zeitplanung sichtbar mit Rollen und Personalkosten abgleichen.');
+    }
+    case 'CR-009': {
+      const checks = [
+        { label: 'Wirtschaftlichkeit', patterns: [/wirtschaftlichkeit|kosten[-\s]?nutzen|amortisation|break[-\s]?even|rentabilitaet/i] },
+        { label: 'Kostenbasis', patterns: [/kostenplanung|gesamtkosten|personalkosten|sachkosten|lizenzkosten|gemeinkosten/i] },
+        { label: 'Nutzen/Einsparung', patterns: [/nutzen|einsparung|zeitersparnis|qualitaetsgewinn|mehrwert|roi/i] },
+        { label: 'Berechnung/Herleitung', patterns: [/berechnung|annahme|herleitung|formel|pro\s+monat|pro\s+jahr|stunden\s+pro/i] }
+      ];
+      return evaluateCostChecks(rule, context, checks, 3, 'Wirtschaftlichkeitsanalyse auf konkrete Kostenplanung stuetzen und Nutzen/Einsparungen rechnerisch herleiten.');
+    }
+    case 'CR-010':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.resources,
+        6,
+        'Ressourcen-Katalog als Checkliste nutzen und fehlende Kategorien markieren.',
+        0.45
+      );
+    case 'CR-011':
+      return evaluateProjectTypeMinimums(rule, context);
+    case 'CR-012': {
+      const checks = [
+        { label: 'Stakeholder', patterns: [/stakeholder|auftraggeber|fachabteilung|kunde|anwender|ausbilder|projektbetreuer|datenschutzbeauftragter/i] },
+        { label: 'Aufwand/Zeit', patterns: [/aufwand|zeitplanung|stunden|\b\d+(?:[,.]\d+)?\s*h\b|workshop|abstimmung|interview/i] },
+        { label: 'Ressourcen/Kosten', patterns: [/ressourcenplanung|kostenplanung|personalkosten|stundensatz|rolle/i] }
+      ];
+      return evaluateCostChecks(rule, context, checks, 2, 'Aktive Stakeholder mit Aufwand, Rollen, Ressourcen oder Kosten im Plan abbilden.');
+    }
+    case 'CR-013': {
+      const hasRisk = /risiko|risiken|swot|risikomatrix|eintrittswahrscheinlichkeit|auswirkung|gegenmassnahme|gegenmaßnahme|massnahme|maßnahme/i.test(context.text);
+      const linked = /ressource|kosten|puffer|zeitplanung|testplanung|testfall|gemeinkosten|budget/i.test(context.text);
+      if (hasRisk && linked) {
+        return costResourceResult(rule, 'gruen', 'Risiko-Bezug erkannt', firstEvidence(context.text, [/risiko|swot|puffer|gegenmassnahme|gegenmaßnahme|massnahme|maßnahme/i], 'Risiko'), 'Risiken werden mit Ressourcen, Zeit, Tests oder Kosten in Verbindung gebracht.', 'Risiko-Bezug beibehalten und bei kritischen Risiken konkrete Puffer oder Massnahmen nennen.');
+      }
+      return costResourceResult(
+        rule,
+        hasRisk ? 'gelb' : 'gelb',
+        hasRisk ? 'Risiko-Bezug teilweise erkannt' : 'Risikoanalyse fehlt/unklar',
+        hasRisk ? 'Risiken erkannt, aber Bezug zu Kosten/Ressourcen/Zeit/Test bleibt unklar.' : '-',
+        'Das v3-Ruleset erwartet, dass relevante Risiken in Ressourcen, Zeitpuffern, Testplanung oder Kostenplanung sichtbar werden.',
+        'Risiken mit Massnahmen, Puffern, Testabdeckung oder Kosten-/Ressourcenauswirkungen verknuepfen.'
+      );
+    }
+    case 'CR-014': {
+      const templatePatterns = [/todo|tbd|lorem\s+ipsum|muster|vorlage|beispiel\s+gmbh|max\s+mustermann|platzhalter|xxx|<[^>]+>/i];
+      const found = templatePatterns.some((pattern) => pattern.test(context.text));
+      return costResourceResult(
+        rule,
+        found ? 'gelb' : 'gruen',
+        found ? 'Vorlagenrest moeglich' : 'keine typischen Vorlagenreste erkannt',
+        found ? firstEvidence(context.text, templatePatterns, 'Vorlagenrest') : '-',
+        found ? 'Typische Platzhalter oder Vorlagenreste koennen auf nicht individualisierte Kosten-/Ressourcenplanung hinweisen.' : 'Keine typischen Platzhalter oder Vorlagenreste wurden maschinenlesbar erkannt.',
+        found ? 'Platzhalter entfernen und Ressourcen/Kosten auf das konkrete Projekt zuschneiden.' : 'Keine unmittelbare Nacharbeit aus dieser Regel.'
+      );
+    }
+    case 'CR-015':
+      return evaluateCostChecks(
+        rule,
+        context,
+        COST_RESOURCE_CHECKS.outputReadiness,
+        2,
+        'Pruefausgabe sollte Vollstaendigkeitsstatus, fehlende Ressourcen, Kosten-Findings und Konsistenzmatrix enthalten.',
+        0.45
+      );
+    default:
+      return costResourceResult(rule, 'grau', 'nur manuell pruefbar', '-', 'Fuer diese v3-Regel gibt es noch keinen spezifischen automatischen Pruefer.', 'Regel manuell gegen die Dokumentation pruefen.', 0.35);
+  }
+}
+
+function evaluateKostenRessourcenRuleset(context) {
+  const results = (KOSTEN_RESSOURCEN_RULESET_V3.rules || [])
+    .map((rule) => evaluateKostenRessourcenRule(rule, context));
+
+  return {
+    metadata: {
+      version: KOSTEN_RESSOURCEN_RULESET_V3.version,
+      evaluatedRules: results.length,
+      criticalFindings: results.filter((result) => result.status === 'rot').length,
+      warnings: results.filter((result) => result.status === 'gelb').length,
+      passed: results.filter((result) => result.status === 'gruen').length
+    },
+    results
+  };
+}
+
 function buildRulesetSummary(results) {
   const ruleResults = results.filter((result) => result.ruleset?.points);
   const weighted = ruleResults.reduce((acc, result) => {
@@ -707,12 +1094,14 @@ export function evaluateAbschlussprojektRuleset({ doc, AntragDoc, options = {}, 
   const context = buildContext({ doc, AntragDoc, options, profile });
   const blockerResults = (IHK_ABSCHLUSSPROJEKT_RULESET.blocker_rules || []).map((rule) => evaluateBlocker(rule, context));
   const ruleResults = (IHK_ABSCHLUSSPROJEKT_RULESET.rules || []).map((rule) => evaluateRule(rule, context));
+  const kostenRessourcenEvaluation = evaluateKostenRessourcenRuleset(context);
   const redFlagResults = evaluateRedFlags(context);
-  const results = [...blockerResults, ...ruleResults, ...redFlagResults];
+  const results = [...blockerResults, ...ruleResults, ...kostenRessourcenEvaluation.results, ...redFlagResults];
 
   return {
     metadata: {
       ruleset: IHK_ABSCHLUSSPROJEKT_RULESET.ruleset,
+      kostenRessourcenRuleset: kostenRessourcenEvaluation.metadata,
       severityLevels: IHK_ABSCHLUSSPROJEKT_RULESET.severity_levels,
       scoreModel: IHK_ABSCHLUSSPROJEKT_RULESET.score_model,
       evaluationFlow: IHK_ABSCHLUSSPROJEKT_RULESET.evaluation_flow,

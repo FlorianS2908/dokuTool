@@ -1,0 +1,154 @@
+{
+  "version": "3.0",
+  "rules": [
+    {
+      "id": "CR-001",
+      "name": "Vollständige Ressourcenplanung vorhanden",
+      "severity": "CRITICAL",
+      "category": "Kosten/Ressourcen",
+      "checks": [
+        "Personal/Rollen",
+        "Hardware/Arbeitsplatz/Infrastruktur",
+        "Software/Entwicklungswerkzeuge",
+        "Lizenzkosten",
+        "Daten/Datenquellen/Testdaten",
+        "Testressourcen/Testumgebung",
+        "Hosting/Deployment/Betrieb",
+        "Sicherheit/Datenschutz/Backup",
+        "Dokumentation/Schulung/Abnahme",
+        "rechtliche/administrative Ressourcen falls relevant"
+      ]
+    },
+    {
+      "id": "CR-002",
+      "name": "Ressourcen müssen zum konkreten Projekt passen",
+      "severity": "CRITICAL",
+      "category": "Kosten/Ressourcen",
+      "rule": "Ressourcenplanung gegen Projektziel, Anforderungen, Technikstack, Umsetzung, Test, Deployment und Dokumentation abgleichen."
+    },
+    {
+      "id": "CR-003",
+      "name": "Kostenplanung vorhanden und rechnerisch nachvollziehbar",
+      "severity": "CRITICAL",
+      "category": "Kosten/Ressourcen",
+      "required_fields": [
+        "Bezeichnung",
+        "Kategorie",
+        "Menge/Anzahl/Stunden",
+        "Einzelkosten oder Stundensatz",
+        "Gesamtkosten",
+        "Begründung/Bemerkung"
+      ]
+    },
+    {
+      "id": "CR-004",
+      "name": "Personalkosten flexibel, aber konsistent prüfen",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "rule": "Personalkosten dürfen von der Vorlage abweichen, müssen aber Rollen, Stunden, Stundensätze und Berechnungslogik nachvollziehbar machen."
+    },
+    {
+      "id": "CR-005",
+      "name": "Gemeinkosten müssen vorhanden sein",
+      "severity": "CRITICAL",
+      "category": "Kosten/Ressourcen",
+      "allowed_models": [
+        "Pauschale Gemeinkosten",
+        "Einzelaufschlüsselung",
+        "explizit in Stundensätzen enthalten"
+      ]
+    },
+    {
+      "id": "CR-006",
+      "name": "Vorhandene Ressourcen und 0-Euro-Positionen begründen",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "rule": "0-Euro-Ressourcen sind zulässig, wenn vorhandene Infrastruktur, freie Software, bestehende Lizenz oder vergleichbare Gründe genannt werden."
+    },
+    {
+      "id": "CR-007",
+      "name": "Kostenplanung gegen Ressourcenplanung abgleichen",
+      "severity": "CRITICAL",
+      "category": "Kosten/Ressourcen",
+      "matrix": "Ressource -> Kategorie -> Kostenposition -> Projektphase -> Nachweisstelle"
+    },
+    {
+      "id": "CR-008",
+      "name": "Zeitplanung, Personalkosten und Projektphasen müssen zusammenpassen",
+      "severity": "CRITICAL",
+      "category": "Kosten/Ressourcen",
+      "rule": "Stunden aus detaillierter Zeitplanung müssen mit Personalkosten und Rollen zusammenpassen."
+    },
+    {
+      "id": "CR-009",
+      "name": "Wirtschaftlichkeit, Nutzen und Amortisation konsistent prüfen",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "rule": "Wirtschaftlichkeitsanalyse muss auf Kostenplanung basieren und Einsparungen plausibel herleiten."
+    },
+    {
+      "id": "CR-010",
+      "name": "Ressourcen-Katalog für automatische Vollständigkeitsprüfung",
+      "severity": "INFO",
+      "category": "Kosten/Ressourcen",
+      "resource_categories": [
+        "Personal/Rollen",
+        "Hardware/Arbeitsplatz/Infrastruktur",
+        "Software/Entwicklungswerkzeuge",
+        "Lizenzkosten und Drittanbieter",
+        "Daten/Datenquellen",
+        "Testressourcen",
+        "Hosting/Deployment/Betrieb",
+        "Sicherheit/Datenschutz/Compliance",
+        "Dokumentation/Schulung/Übergabe",
+        "rechtliche/administrative Ressourcen"
+      ]
+    },
+    {
+      "id": "CR-011",
+      "name": "Projektart-spezifische Mindestressourcen",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "project_types": [
+        "Web-/CRUD-Anwendung",
+        "Datenbank-/Datenmigrationsprojekt",
+        "API-Projekt",
+        "KI-/Automatisierungsprojekt",
+        "Systemintegrationsprojekt"
+      ]
+    },
+    {
+      "id": "CR-012",
+      "name": "Stakeholder, Kosten und Ressourcen abgleichen",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "rule": "Aktive Stakeholder müssen bei Aufwand verursachender Beteiligung in Zeit-/Ressourcen-/Kostenplanung auftauchen."
+    },
+    {
+      "id": "CR-013",
+      "name": "SWOT-/Risiko-Bezug zu Kosten und Ressourcen",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "rule": "Relevante Risiken müssen in Ressourcen, Zeitpuffern, Testplanung oder Kostenplanung berücksichtigt werden."
+    },
+    {
+      "id": "CR-014",
+      "name": "Template-Abgleich und Vorlagenreste",
+      "severity": "MAJOR",
+      "category": "Kosten/Ressourcen",
+      "rule": "Typische Vorlagenreste und unpassende Ressourcenpositionen werden als Finding ausgegeben."
+    },
+    {
+      "id": "CR-015",
+      "name": "Prüfausgabe für Kosten- und Ressourcenplanung",
+      "severity": "INFO",
+      "category": "Kosten/Ressourcen",
+      "outputs": [
+        "Vollständigkeitsstatus",
+        "fehlende erwartbare Ressourcen",
+        "Kosten-Findings",
+        "Konsistenzmatrix"
+      ]
+    }
+  ]
+}
