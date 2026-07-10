@@ -27,7 +27,7 @@ if not defined NODE_EXE (
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "if ((Test-NetConnection -ComputerName localhost -Port %PORT% -InformationLevel Quiet) -eq $true) { exit 0 } else { exit 1 }" >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$client = [Net.Sockets.TcpClient]::new(); try { $client.Connect('127.0.0.1', [int]$env:PORT); exit 0 } catch { exit 1 } finally { $client.Dispose() }" >nul 2>nul
 if %errorlevel%==0 (
   echo Das DokuTool laeuft bereits auf %APP_URL%.
   echo Ich oeffne es jetzt im Browser.
@@ -37,8 +37,8 @@ if %errorlevel%==0 (
 )
 
 echo Server startet. Dieses Fenster bitte offen lassen.
-echo Browser wird gleich geoeffnet ...
-start "" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Start-Process '%APP_URL%'"
+echo Browser wird geoeffnet, sobald der Server erreichbar ist ...
+start "" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "$url = $env:APP_URL; for ($i = 0; $i -lt 30; $i++) { $client = [Net.Sockets.TcpClient]::new(); try { $client.Connect('127.0.0.1', [int]$env:PORT); [Diagnostics.Process]::Start($url) | Out-Null; exit 0 } catch { Start-Sleep -Seconds 1 } finally { $client.Dispose() } }; [Diagnostics.Process]::Start($url) | Out-Null"
 
 "%NODE_EXE%" server.js
 echo.

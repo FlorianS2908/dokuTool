@@ -2176,4 +2176,16 @@ const server = app.listen(port, () => {
   console.log(`IHK DokuTool läuft auf http://localhost:${port}`);
 });
 
+server.on('error', (error) => {
+  if (error?.code === 'EADDRINUSE') {
+    console.error(`Port ${port} ist bereits belegt.`);
+    console.error(`Wenn das DokuTool schon laeuft, oeffne http://localhost:${port}`);
+    console.error('Falls dort nichts reagiert, beende den alten node.exe-Prozess im Task-Manager und starte erneut.');
+    process.exit(1);
+  }
+
+  console.error(error);
+  process.exit(1);
+});
+
 export { app, server };
