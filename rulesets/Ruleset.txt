@@ -1,0 +1,122 @@
+Ja, hier ist die aktuelle Regelliste, gruppiert nach Prüfschicht.
+
+**Immer Geprüft**
+- Alle Verzeichnisse müssen verlinkt sein
+- Abweichungen beim wording der Verzeichnisse möglich => prüfen ob Thematisch vorhanden
+	- Inhaltsverzeichnis vorhanden, plausibel vollständig
+	- Abbildungsverzeichnis vorhanden, plausibel vollständig
+	- Tabellenverzeichnis vorhanden, plausibel vollständig
+	- Listingverzeichnis/Quellcodeverzeichnis vorhanden, plausibel vollständig
+	- Abkürzungsverzeichnis vorhanden, plausibel vollständig
+	- Fremdwortverzeichnis/Glossar vorhanden, plausibel vollständig
+	- Literatur-/Quellenverzeichnis vorhanden, plausibel vollständig
+	- Anhangsverzeichnis vorhanden, plausibel vollständig
+
+- Deckblatt mit Name, Firma, Projekttitel, Ausbilder und Projektbetreuer
+- Kopfzeile mit Projekttitel und Firmenlogo
+- Fußzeile mit Seitenzahl und Name des Dokumentationserstellers
+- Einleitung
+	- Abweichungen zum Projektantrag
+		- optinal => wenn dann muss hier ein Bezug zum Antrag hergestellt werden und ein Abgleich statt finden
+			- sollte kein Antrag bei liegen muss das angemerkt werden das die Prüfung hier nicht stattfinden kann
+	- Projektumfeld
+		- beschreibung der Firma (anzahl Mitarbeiter, was produziert die Firma)
+		- beschreibung der Auftragsfirma (wenn internes projekt, dann muss dieser punkt nicht berücksichtigt werden)
+		- kurz personelle Schnittstellen ansprechen. Verweis auf die detallierte Stakeholderanalyse (welche Abteilungen sind vom Projket betroffen)
+	- Projektziel
+		- kurz erläuterung des Projketziele ohen auf der Soll und Anforderungsanalyse zu sehr vorzugreifen (Verweis mit verlinkung auf Soll und/oder Anforderungsanalyse)
+	- Projektbegründung
+		- kurzes Aufgreifen der aktuellen Situation und welche Erwartungen daraus an dem Projekt bestehen (Wirtschaftliche Einordnung => Verweis mit verlinkung auf  Wirtschaftlichkeitsanalyse)
+	- Projektschnittstellen
+	- Projektabgrenzung
+- Analysephase ()
+	- Ist Zustand => es muss geprüft werden ob es in der Dokumentation relativ am Anfang eine Ausgangssituation beschrieben wird
+	- Soll Zustand => es muss geprüft werden ob es in der Dokumentation relativ am Anfang ein Ziel beschrieben wird
+		- optional => prüfen ob ein Pflichten und Lastenheft vorhanden ist
+			- als Anhang
+			- als Auszug
+			- oder beides
+	- Anforderungsanalyse
+		- als resultat aus dem Soll und Ist werden die Anforderungen mit den Stakeholdern festgehalten
+			- funktionale Anforderungen
+			- nicht funktionale Anforderungen
+			- geschäftliche Anforderungen
+		=> diese können in der Dokumentation an sich stehen oder im Anhang
+	- Stakeholderanalyse
+		-
+- Testphase/Qualitätssicherung vorhanden und passend zur Dokumentation
+- Soll-/Ist-Vergleich vorhanden und passend zur Dokumentation
+- Fazit vorhanden
+- Projektantrag gegen Dokumentation abgeglichen
+- Eigenständigkeitserklärung/persönliche Erklärung vorhanden
+- Änderungen gegenüber Projektantrag erläutert
+- Version/Datum/Autor-Metadaten vorhanden
+
+- Wird in den Phasen in der Textbausteien auf einen anderen Teil der Doku verwiesen
+	- prüfen ob es eine verlinkung gibt
+	- passen die Thematischen Inhalte der Verlinkungen zueinander
+
+**Allgemeine IHK-Regeln**
+- Änderungen gegenüber dem genehmigten Projektantrag erläutert
+- Wirtschaftlichkeit oder Kosten-/Nutzenbetrachtung vorhanden
+- Fremdinhalte, Quellen, Bilder und Codeanteile gekennzeichnet
+- Anlagen werden aus dem Fließtext referenziert, falls Anlagen erkannt werden
+- FIAE-Prozessstruktur fachlich abgedeckt: Analyse, Soll-Konzept, Planung, Entwurf, Implementierung, Test/QS, Soll-/Ist-Vergleich
+
+**UML-Prüfung**
+- UML-Diagramm als Abbildung vorhanden
+- UML-Notation fachlich plausibel
+- UML-Inhaltsbezug zur Dokumentation
+- UML-Diagramm in der Analysephase
+- UML-Diagramm in der Planungsphase
+- UML-Diagramm in der Entwurfsphase
+- UML-Diagramm in der Implementierungsphase
+
+Geprüfte UML-Typen:
+- Klassendiagramm
+- Anwendungsfalldiagramm
+- Aktivitätsdiagramm
+- Sequenzdiagramm
+- Komponentendiagramm
+- Zustandsdiagramm
+- Verteilungsdiagramm
+
+**KI-Richtlinien**
+- KI-Richtlinie nach ausgewähltem IHK-Profil
+- Mögliche KI-Nutzung / Fundstellen
+- KI-Nachweis gegen IHK-Richtlinie
+
+Dabei sucht das Tool u. a. nach ChatGPT/OpenAI/Copilot/Gemini/Claude, Prompt-/Antwort-Nachweisen, KI-Nutzungserklärungen und typischen KI-Restformulierungen.
+
+**Regionale IHK-Regeln**
+Je nach Dropdown kommen dazu:
+- Seitenumfang nach IHK-Profil
+- PDF-Dateigröße, falls im Profil hinterlegt
+- Layout-/Formhinweis des Profils
+- KI-Sonderregel des Profils
+- zusätzliche regionale Pflichtpunkte
+
+Beispiele:
+- IHK Nord Westfalen: Qualitätssicherung, Wirtschaftlichkeit, max. 15 Seiten, PDF max. 8 MB
+- IHK Köln: max. 20 Seiten Projektbericht, Gesamt max. 60 Seiten, generative KI nicht zulässig
+- IHK Stuttgart: Kundendokumentation, Vorgehen/Entscheidungen, PDF max. 18 MB, KI nicht für Struktur/Formulierung
+- IHK Hanau: persönliche Erklärung, Projektprotokoll, PDF max. 4 MB
+- IHK Halle-Dessau: eidesstattliche Erklärung/IHK-Deckblatt, 8-10 Seiten
+- IHK Rhein-Neckar: Kundendokumentation, FIAE-Quellcode als Anhang
+- IHK Frankfurt: Ist/Soll, Ziel, Schnittstellen, Wirtschaftlichkeit, Sicherheit/Nachhaltigkeit
+- IHK Erfurt: selbstständige Erstellung und Nachvollziehbarkeit
+
+**Optionale KI-Zusatzprüfung**
+Wenn aktiviert, prüft OpenAI ergänzend:
+- passt die Dokumentation semantisch zum Projektantrag?
+- ist die Qualitätssicherung fachlich passend?
+- ist der Soll-/Ist-Vergleich plausibel?
+- sind kritische Nacharbeiten konkret benannt?
+- ist UML fachlich/inhaltlich plausibel, inkl. Bildprüfung bei DOCX-Bildern?
+
+
+**Generelle Informationen**
+- Das wording kann von dem hier in den Regeln erwähnten Wörding abweichen.
+Somit muss es dann Inhaltlich geprüft werden ob es diesen Inhalt gibt
+- Je nach Projekt typ können weiter Analysen, Planung oder Implementierungs und Testschritte von Nöten sein
+	- diese müssen strukturell und Thematisch in die Dokumentation passen

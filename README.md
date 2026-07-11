@@ -2,6 +2,18 @@
 
 Lokales Web-Tool zur Vorpruefung einer IHK-Projektdokumentation gegen formale und inhaltliche Kriterien. Das Tool kombiniert regelbasierte Pruefung mit optionaler OpenAI-KI-Zusatzpruefung, Benutzerkonten, Profilen und Bericht-History.
 
+## Pruefmodi
+
+Das Tool trennt drei Pruefebenen:
+
+- Regelbasierte Pruefung: laeuft lokal und nutzt die hinterlegten Rulesets ohne API-Kosten.
+- Einfache KI-Zusatzpruefung: prueft semantische Punkte ergaenzend mit OpenAI, wenn ein API-Key vorhanden ist.
+- Multi-KI-Konsenspruefung: vorbereitetes Konsensverfahren mit Primary Reviewer, Counter Reviewer, Revision, Konflikterkennung und Arbiter. Dieser Modus benoetigt mehr Zeit und verursacht mehr API-Kosten.
+
+Die KI bewertet nicht frei. Jede KI-Bewertung muss an eine Regel-ID, Fundstelle, Begruendung und Empfehlung gebunden sein. Die KI generiert keine fertige IHK-Dokumentation, sondern prueft, erklaert und nennt konkrete To-dos.
+
+Wichtig: Das Tool ist eine automatische Vorpruefung und keine rechtsverbindliche Bewertung durch IHK oder Pruefungsausschuss.
+
 ## Was das Tool prueft
 
 - Inhaltsverzeichnis vorhanden und plausibel vollstaendig
@@ -20,6 +32,53 @@ Lokales Web-Tool zur Vorpruefung einer IHK-Projektdokumentation gegen formale un
 - Soll-/Ist-Vergleich
 - Fazit
 - Projektantrag -> Dokumentation-Abgleich, wenn der Antrag hochgeladen wird
+
+## Rulesets
+
+Die fachliche Bewertungsbasis liegt unter `rulesets/`.
+
+- `rulesets/Ruleset.txt`: fachliche Quelle fuer das aktuelle FIAE-Ruleset.
+- `rulesets/fiae_ruleset_v2.json`: maschinenlesbare strukturierte Version mit Regel-ID, Kategorie, Phase, Schweregrad, Evidenzanforderungen, Statuslogik, Wording-Aliases und bedingter Gueltigkeit.
+- `rulesets/ihk_abschlussprojekt_ruleset_v1.json`: bestehendes Abschlussprojekt-Ruleset.
+- `rulesets/kosten_ressourcen_rules_v3.json`: erweiterte Kosten-/Ressourcen- und Gemeinkostenregeln.
+
+Validierung:
+
+```bash
+npm run validate:rulesets
+npm run test:review
+```
+
+## Lokale Referenzbibliothek
+
+Das Tool kann private lokale Fachbuch-Referenzen als Metadatenbasis verwenden. Die Buchdateien selbst werden lokal unter `.data/references/books/` gespeichert und nicht nach GitHub uebertragen.
+
+Unterstuetzte Formate:
+
+- PDF
+- EPUB
+
+Neue Buecher hinzufuegen:
+
+```bash
+npm run references:import -- "PFAD_ZUM_BUCH"
+```
+
+Oder bereits abgelegte Dateien scannen:
+
+```bash
+npm run references:scan
+```
+
+Validierung:
+
+```bash
+npm run validate:references
+```
+
+Aktuell verwendet das Tool nur sichere Metadaten, Themen und Regelzuordnungen. Es speichert keine Buchtexte im Repository und gibt ueber die API keine Buchinhalte aus. Eine spaetere Ausbaustufe kann lokale Volltextindexierung, kurze Fundstellen und KI-Kontext vorbereiten, ohne Buchdateien oder lange Auszuege zu veroeffentlichen.
+
+Rechtlicher Hinweis: Nur Buecher verwenden, fuer die du Nutzungsrechte besitzt. Keine Buchdateien und keine langen Auszuege veroeffentlichen.
 
 ## Installation unter Windows
 
@@ -96,7 +155,7 @@ Alternativ unter Windows `start-windows.bat` doppelklicken.
 3. Projektdokumentation hochladen, am besten als `.docx`.
 4. Optional den Projektantrag hochladen.
 5. Projekttitel, Ersteller und Firma eintragen.
-6. Optional KI-Zusatzpruefung aktiv lassen, wenn ein API-Key hinterlegt ist.
+6. KI-Pruefmodus waehlen: deaktiviert, einfache KI-Zusatzpruefung oder Multi-KI-Konsenspruefung.
 7. **Pruefung starten** klicken.
 8. Bericht im Browser pruefen. Der Bericht wird automatisch in der History des eingeloggten Nutzers gespeichert.
 9. Ueber **Excel-Bericht** einen `.xlsx`-Pruefbericht herunterladen.
@@ -135,6 +194,7 @@ florian-ai-tool/
 - Excel-Export: ExcelJS
 - KI-Anbindung: OpenAI Responses API ueber das OpenAI SDK
 - API-Key bleibt im Backend und wird nicht im Browser gespeichert
+- Multi-KI-Review: vorbereitet unter `src/server/review/`
 
 ## Docker optional
 

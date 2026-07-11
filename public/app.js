@@ -58,6 +58,9 @@ const quizSettingsContent = document.querySelector('#quizSettingsContent');
 const showHistoryToggle = document.querySelector('#showHistoryToggle');
 const showChatToggle = document.querySelector('#showChatToggle');
 const dokuSettingsStatus = document.querySelector('#dokuSettingsStatus');
+const referenceLibrarySummary = document.querySelector('#referenceLibrarySummary');
+const referenceLibraryStatus = document.querySelector('#referenceLibraryStatus');
+const scanReferencesButton = document.querySelector('#scanReferencesButton');
 const showQuizDashboardToggle = document.querySelector('#showQuizDashboardToggle');
 const showQuizPoolToggle = document.querySelector('#showQuizPoolToggle');
 const showQuizHistoryToggle = document.querySelector('#showQuizHistoryToggle');
@@ -110,6 +113,7 @@ const resultTableBody = document.querySelector('#resultTable tbody');
 const downloadExcelButton = document.querySelector('#downloadExcelButton');
 const downloadJsonButton = document.querySelector('#downloadJsonButton');
 const ihkProfileSelect = document.querySelector('#ihkProfile');
+const aiReviewModeSelect = document.querySelector('#aiReviewMode');
 
 const historyStatus = document.querySelector('#historyStatus');
 const historyList = document.querySelector('#historyList');
@@ -300,6 +304,7 @@ function showDokuTool(user = currentUser) {
   profileWidget.classList.remove('hidden');
   setSetupMode('doku');
   loadDokuSettings();
+  loadLocalReferences();
   selectDokuTab('checker');
   loadIhkProfiles();
   if (dokuSettings.chat) loadChatHistory();
@@ -409,6 +414,33 @@ function updateDokuSettings(nextSettings) {
   saveDokuSettings();
   applyDokuSettings();
   dokuSettingsStatus.textContent = 'Einstellungen gespeichert.';
+}
+
+function renderLocalReferences(references = []) {
+  if (!referenceLibrarySummary) return;
+  if (!references.length) {
+    referenceLibrarySummary.innerHTML = '<p class="status-line">Keine Referenzen registriert.</p>';
+    return;
+  }
+  referenceLibrarySummary.innerHTML = references.map((reference) => `
+    <article>
+      <strong>${escapeHtml(reference.title || reference.id)}</strong>
+      <small>${escapeHtml(reference.status || 'missing')} · ${escapeHtml((reference.topics || []).slice(0, 4).join(', ') || 'keine Topics')}</small>
+    </article>
+  `).join('');
+}
+
+async function loadLocalReferences() {
+  if (!referenceLibrarySummary || !currentUser) return;
+  referenceLibraryStatus.textContent = 'Referenzen werden geladen ...';
+  try {
+    const data = await apiFetch('/api/references');
+    renderLocalReferences(data.references || []);
+    const available = (data.references || []).filter((reference) => reference.status === 'available').length;
+    referenceLibraryStatus.textContent = `${available}/${data.references?.length || 0} lokale Referenz(en) vorhanden.`;
+  } catch (error) {
+    referenceLibraryStatus.textContent = `Referenzen konnten nicht geladen werden: ${error.message}`;
+  }
 }
 
 function selectDokuTab(tabName) {
@@ -564,6 +596,20 @@ showHistoryToggle.addEventListener('change', () => {
 showChatToggle.addEventListener('change', () => {
   updateDokuSettings({ chat: showChatToggle.checked });
   if (showChatToggle.checked) loadChatHistory();
+});
+
+scanReferencesButton?.addEventListener('click', async () => {
+  scanReferencesButton.disabled = true;
+  referenceLibraryStatus.textContent = 'Lokale Referenzen werden gescannt ...';
+  try {
+    const result = await apiFetch('/api/references/scan', { method: 'POST' });
+    referenceLibraryStatus.textContent = `Scan abgeschlossen: ${result.filesFound} Datei(en), ${result.added} neu registriert.`;
+    await loadLocalReferences();
+  } catch (error) {
+    referenceLibraryStatus.textContent = `Scan fehlgeschlagen: ${error.message}`;
+  } finally {
+    scanReferencesButton.disabled = false;
+  }
 });
 
 showQuizDashboardToggle.addEventListener('change', () => {
@@ -1061,7 +1107,9 @@ analyzeForm.addEventListener('submit', async (event) => {
 
   try {
     const formData = new FormData(analyzeForm);
-    formData.set('useAi', document.querySelector('#useAi').checked ? 'true' : 'false');
+    const aiReviewMode = aiReviewModeSelect?.value || 'disabled';
+    formData.set('aiReviewMode', aiReviewMode);
+    formData.set('useAi', aiReviewMode === 'disabled' ? 'false' : 'true');
 
     const response = await fetch('/api/analyze', {
       method: 'POST',
@@ -1075,11 +1123,16 @@ analyzeForm.addEventListener('submit', async (event) => {
     selectReport(data);
     await loadHistory();
 
-    const aiText = data.ai?.used
-      ? ` KI-Zusatzpruefung mit ${data.ai.model} ausgefuehrt.`
-      : data.ai?.error
-        ? ` KI-Zusatzpruefung nicht ausgefuehrt: ${data.ai.error}`
-        : '';
+    let aiText = '';
+    if (data.aiConsensus?.enabled) {
+      aiText = ` Multi-KI-Konsenspruefung fuer ${data.aiConsensus.reviewedRuleCount} Regel(n) ausgefuehrt.`;
+    } else if (data.aiConsensus?.reason) {
+      aiText = ` Multi-KI-Konsenspruefung nicht ausgefuehrt: ${data.aiConsensus.reason}`;
+    } else if (data.ai?.used) {
+      aiText = ` KI-Zusatzpruefung mit ${data.ai.model} ausgefuehrt.`;
+    } else if (data.ai?.error) {
+      aiText = ` KI-Zusatzpruefung nicht ausgefuehrt: ${data.ai.error}`;
+    }
     analyzeStatus.textContent = `Bericht erstellt und in der History gespeichert.${aiText}`;
   } catch (error) {
     analyzeStatus.textContent = `Fehler: ${error.message}`;

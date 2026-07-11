@@ -71,6 +71,14 @@
           </label>
           <p id="dokuSettingsStatus" class="status-line"></p>
         </section>
+
+        <section class="setup-block">
+          <h3>Lokale Referenzbibliothek</h3>
+          <p class="status-line">Buecher liegen lokal unter .data/references/books/ und werden nicht nach GitHub uebertragen.</p>
+          <div id="referenceLibrarySummary" class="schema-list"></div>
+          <button id="scanReferencesButton" class="secondary" type="button">Referenzen scannen</button>
+          <p id="referenceLibraryStatus" class="status-line"></p>
+        </section>
       </div>
 
       <div id="quizSettingsContent" class="setup-content">
@@ -513,10 +521,17 @@
           </label>
         </div>
 
-        <label class="checkbox">
-          <input id="useAi" name="useAi" type="checkbox" checked />
-          KI-Zusatzprüfung nutzen, wenn API-Key vorhanden ist
-        </label>
+        <div class="grid two">
+          <label>
+            KI-Pruefmodus
+            <select id="aiReviewMode" name="aiReviewMode">
+              <option value="disabled">KI-Zusatzpruefung deaktiviert</option>
+              <option value="simple" selected>Einfache KI-Zusatzpruefung</option>
+              <option value="multi">Multi-KI-Konsenspruefung</option>
+            </select>
+          </label>
+          <p id="aiReviewModeHint" class="form-hint">Die Multi-KI-Pruefung benoetigt mehr Zeit und verursacht mehr API-Kosten.</p>
+        </div>
 
         <div class="actions">
           <button id="analyzeButton" type="submit">Prüfung starten</button>

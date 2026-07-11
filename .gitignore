@@ -5,6 +5,11 @@ _tmp_*
 .env
 .DS_Store
 *.log
+*.epub
+*.pdf
+*.mobi
+*.azw
+*.azw3
 reports/
 uploads/
 secrets/

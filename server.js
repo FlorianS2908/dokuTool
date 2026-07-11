@@ -8,9 +8,15 @@ import pdfParse from 'pdf-parse';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import { createHmac, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { createDataStore, toPublicUser } from './data-store.js';
 import { GENERAL_IHK_RULES, getIhkRuleProfile, ihkProfilesForClient } from './ihk-rules.js';
 import { evaluateAbschlussprojektRuleset } from './ruleset-evaluator.js';
+import { extractDocumentSections } from './src/server/analysis/document-sections.js';
+import { evaluateFiaeRulesetV2 } from './src/server/rules/fiae-ruleset-v2-evaluator.js';
+import { runAiConsensusReview } from './src/server/review/ai-review-orchestrator.js';
+import { searchReferenceMetadata, getReferenceTopics } from './src/server/references/reference-search.js';
+import { scanLocalReferences } from './src/server/references/reference-scanner.js';
 import { securityHeaders } from './src/server/security.js';
 import {
   loadQuizQuestionPools,
@@ -177,6 +183,10 @@ function createClient() {
     throw new Error('OPENAI_API_KEY fehlt. Bitte .env anlegen und API-Key eintragen.');
   }
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+function hasOpenAiApiKey() {
+  return Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dein_api_key_hier');
 }
 
 function buildInstructions(mode) {
@@ -1410,7 +1420,7 @@ function findPhaseUml(text, phasePatterns) {
   return null;
 }
 
-function localAnalyze(doc, AntragDoc, options = {}) {
+function localAnalyze(doc, AntragDoc, options = {}, sections = extractDocumentSections(doc)) {
   const results = [];
   const text = doc.text || '';
   const lText = lower(text);
@@ -1422,6 +1432,7 @@ function localAnalyze(doc, AntragDoc, options = {}) {
     pageCount: doc.pageCount,
     headings: extractHeadings(doc.bodyText || doc.text),
     docxStructure: doc.structure,
+    sectionKeys: Object.keys(sections || {}).filter((key) => key !== 'fullText'),
     warnings: doc.warnings || [],
     ihkProfile: {
       key: ihkProfile.key,
@@ -1639,6 +1650,20 @@ function localAnalyze(doc, AntragDoc, options = {}) {
   meta.ruleset = rulesetEvaluation.metadata;
   results.push(...rulesetEvaluation.results);
 
+  const fiaeRulesetEvaluation = evaluateFiaeRulesetV2({
+    doc,
+    AntragDoc,
+    options,
+    profile: ihkProfile,
+    sections
+  });
+  meta.rulesets = {
+    ihk_abschlussprojekt_ruleset_v1: rulesetEvaluation.metadata?.summary || rulesetEvaluation.metadata?.ruleset,
+    kosten_ressourcen_rules_v3: rulesetEvaluation.metadata?.kostenRessourcenRuleset,
+    fiae_ruleset_v2: fiaeRulesetEvaluation.metadata?.summary
+  };
+  results.push(...fiaeRulesetEvaluation.results);
+
   const weighted = results.reduce((acc, item) => {
     acc.total += item.weight || 1;
     acc.score += statusScore(item.status) * (item.weight || 1);
@@ -1830,6 +1855,82 @@ function statusFill(status) {
   return fills[status] || 'FFFFFF';
 }
 
+function styleWorksheetHeader(sheet) {
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+}
+
+function addAiConsensusSheets(workbook, report) {
+  const consensus = report.aiConsensus;
+  const items = Array.isArray(consensus?.items) ? consensus.items : [];
+
+  const consensusSheet = workbook.addWorksheet('KI-Konsens');
+  consensusSheet.columns = [
+    { header: 'Regel-ID', key: 'ruleId', width: 18 },
+    { header: 'Basisergebnis', key: 'baseStatus', width: 16 },
+    { header: 'KI 1', key: 'primaryStatus', width: 12 },
+    { header: 'KI 2', key: 'counterStatus', width: 12 },
+    { header: 'Revision', key: 'revisionStatus', width: 12 },
+    { header: 'Schlichter', key: 'arbiterStatus', width: 12 },
+    { header: 'Final', key: 'finalStatus', width: 12 },
+    { header: 'Konsens erreicht', key: 'consensusReached', width: 18 },
+    { header: 'Manuelle Pruefung', key: 'manualReviewRequired', width: 18 },
+    { header: 'Begruendung', key: 'finalReason', width: 70 },
+    { header: 'Empfehlung', key: 'finalRecommendation', width: 70 }
+  ];
+  items.forEach((item) => consensusSheet.addRow(item));
+  styleWorksheetHeader(consensusSheet);
+
+  const conflictSheet = workbook.addWorksheet('KI-Konflikte');
+  conflictSheet.columns = [
+    { header: 'Regel-ID', key: 'ruleId', width: 18 },
+    { header: 'Runde', key: 'round', width: 10 },
+    { header: 'Konflikttyp', key: 'type', width: 26 },
+    { header: 'Konfliktstufe', key: 'level', width: 16 },
+    { header: 'Beschreibung', key: 'description', width: 80 },
+    { header: 'Status KI 1', key: 'primaryStatus', width: 14 },
+    { header: 'Status KI 2', key: 'counterStatus', width: 14 },
+    { header: 'Entscheidung', key: 'decision', width: 28 }
+  ];
+  items.flatMap((item) => item.conflictHistory || []).forEach((conflict) => conflictSheet.addRow({
+    ...conflict,
+    decision: conflict.requiresAnotherRound ? 'weitere Runde/manuell' : 'geloest'
+  }));
+  styleWorksheetHeader(conflictSheet);
+
+  const manualSheet = workbook.addWorksheet('Manuelle Pruefung');
+  manualSheet.columns = [
+    { header: 'Regel-ID', key: 'ruleId', width: 18 },
+    { header: 'Kategorie', key: 'category', width: 32 },
+    { header: 'Grund', key: 'reason', width: 70 },
+    { header: 'Fundstelle', key: 'evidence', width: 70 },
+    { header: 'Empfehlung', key: 'recommendation', width: 70 }
+  ];
+  items.filter((item) => item.manualReviewRequired).forEach((item) => {
+    const base = (report.results || []).find((result) => result.ruleset?.id === item.ruleId);
+    manualSheet.addRow({
+      ruleId: item.ruleId,
+      category: base?.category || '',
+      reason: item.finalReason || 'Manuelle Pruefung erforderlich.',
+      evidence: base?.evidence || '-',
+      recommendation: item.finalRecommendation || base?.recommendation || ''
+    });
+  });
+  styleWorksheetHeader(manualSheet);
+}
+
+function formatResultReferences(references = []) {
+  if (!Array.isArray(references) || !references.length) return '';
+  return references
+    .map((reference) => {
+      const topics = Array.isArray(reference.topics) && reference.topics.length
+        ? ` (${reference.topics.slice(0, 4).join(', ')})`
+        : '';
+      return `${reference.title}${topics}`;
+    })
+    .join('; ');
+}
+
 async function createExcel(report) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'IHK DokuTool';
@@ -1863,9 +1964,13 @@ async function createExcel(report) {
     { header: 'Fundstelle', key: 'evidence', width: 60 },
     { header: 'Begründung', key: 'reason', width: 70 },
     { header: 'Empfehlung', key: 'recommendation', width: 70 },
-    { header: 'Schweregrad', key: 'severity', width: 14 }
+    { header: 'Schweregrad', key: 'severity', width: 14 },
+    { header: 'Referenzen', key: 'referencesText', width: 52 }
   ];
-  report.results.forEach((item) => all.addRow(item));
+  report.results.forEach((item) => all.addRow({
+    ...item,
+    referencesText: formatResultReferences(item.references)
+  }));
   all.getRow(1).font = { bold: true };
   all.eachRow((row, rowNumber) => {
     row.alignment = { vertical: 'top', wrapText: true };
@@ -1875,16 +1980,21 @@ async function createExcel(report) {
     }
   });
   all.views = [{ state: 'frozen', ySplit: 1 }];
-  all.autoFilter = 'A1:H1';
+  all.autoFilter = 'A1:I1';
 
   const critical = workbook.addWorksheet('Kritische Mängel');
   critical.columns = all.columns;
-  report.results.filter((r) => r.status === 'rot' || r.severity === 'hoch').forEach((item) => critical.addRow(item));
+  report.results.filter((r) => r.status === 'rot' || r.severity === 'hoch').forEach((item) => critical.addRow({
+    ...item,
+    referencesText: formatResultReferences(item.references)
+  }));
   critical.getRow(1).font = { bold: true };
   critical.eachRow((row, rowNumber) => {
     row.alignment = { vertical: 'top', wrapText: true };
     if (rowNumber > 1) row.getCell('status').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusFill(row.getCell('status').value) } };
   });
+
+  addAiConsensusSheets(workbook, report);
 
   const raw = workbook.addWorksheet('Rohdaten');
   raw.columns = [
@@ -1912,6 +2022,18 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/ihk-profiles', requireAuth, (_req, res) => {
   res.json({ profiles: ihkProfilesForClient() });
+});
+
+app.get('/api/references', requireAuth, (req, res) => {
+  res.json({ references: searchReferenceMetadata(req.query.q || '') });
+});
+
+app.get('/api/references/topics', requireAuth, (_req, res) => {
+  res.json(getReferenceTopics());
+});
+
+app.post('/api/references/scan', requireAuth, (_req, res) => {
+  res.json(scanLocalReferences());
 });
 
 app.get('/api/auth/me', async (req, res) => {
@@ -2106,14 +2228,16 @@ app.post('/api/analyze', requireAuth, upload.fields([
       author: req.body.author || '',
       company: req.body.company || '',
       ihkProfile: getIhkRuleProfile(req.body.ihkProfile || 'allgemein').key,
-      useAi: req.body.useAi === 'true'
+      aiReviewMode: ['disabled', 'simple', 'multi'].includes(req.body.aiReviewMode) ? req.body.aiReviewMode : (req.body.useAi === 'true' ? 'simple' : 'disabled'),
+      useAi: req.body.useAi === 'true' || req.body.aiReviewMode === 'simple' || req.body.aiReviewMode === 'multi'
     };
 
     const doc = await extractFile(docFile);
     const AntragDoc = applicationFile ? await extractFile(applicationFile) : null;
-    const report = localAnalyze(doc, AntragDoc, options);
+    const sections = extractDocumentSections(doc);
+    const report = localAnalyze(doc, AntragDoc, options, sections);
 
-    if (options.useAi) {
+    if (options.aiReviewMode === 'simple') {
       try {
         const aiReview = await runAiReview({ doc, AntragDoc, baseReport: report, options });
         mergeAiReview(report, aiReview);
@@ -2133,6 +2257,20 @@ app.post('/api/analyze', requireAuth, upload.fields([
       }
     } else {
       report.ai = { used: false, reason: 'KI-Prüfung im Formular deaktiviert.' };
+    }
+
+    if (options.aiReviewMode === 'multi') {
+      report.ai = { used: false, reason: 'Einfache KI-Zusatzpruefung zugunsten Multi-KI-Konsenspruefung uebersprungen.' };
+      report.aiConsensus = await runAiConsensusReview({
+        doc,
+        AntragDoc,
+        sections,
+        baseReport: report,
+        maxRounds: 3,
+        apiKeyAvailable: hasOpenAiApiKey()
+      });
+    } else if (!report.aiConsensus) {
+      report.aiConsensus = { enabled: false, maxRounds: 3, completedRounds: 0, consensusReached: false, openConflictCount: 0, manualReviewCount: 0, reviewedRuleCount: 0, items: [] };
     }
 
     const savedReport = await dataStore.createReport(req.user.id, {
@@ -2172,20 +2310,25 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: error?.message || 'Unbekannter Serverfehler.' });
 });
 
-const server = app.listen(port, () => {
-  console.log(`IHK DokuTool läuft auf http://localhost:${port}`);
-});
+const isMainModule = fileURLToPath(import.meta.url) === process.argv[1];
+const server = isMainModule
+  ? app.listen(port, () => {
+    console.log(`IHK DokuTool laeuft auf http://localhost:${port}`);
+  })
+  : null;
 
-server.on('error', (error) => {
-  if (error?.code === 'EADDRINUSE') {
-    console.error(`Port ${port} ist bereits belegt.`);
-    console.error(`Wenn das DokuTool schon laeuft, oeffne http://localhost:${port}`);
-    console.error('Falls dort nichts reagiert, beende den alten node.exe-Prozess im Task-Manager und starte erneut.');
+if (server) {
+  server.on('error', (error) => {
+    if (error?.code === 'EADDRINUSE') {
+      console.error(`Port ${port} ist bereits belegt.`);
+      console.error(`Wenn das DokuTool schon laeuft, oeffne http://localhost:${port}`);
+      console.error('Falls dort nichts reagiert, beende den alten node.exe-Prozess im Task-Manager und starte erneut.');
+      process.exit(1);
+    }
+
+    console.error(error);
     process.exit(1);
-  }
+  });
+}
 
-  console.error(error);
-  process.exit(1);
-});
-
-export { app, server };
+export { app, server, createExcel };

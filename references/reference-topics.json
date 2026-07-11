@@ -1,0 +1,45 @@
+{
+  "version": "1.0.0",
+  "topicMappings": [
+    {
+      "topic": "UML",
+      "keywords": ["UML", "Unified Modeling Language", "Klassendiagramm", "Sequenzdiagramm", "Use Case", "Aktivitaetsdiagramm", "Komponentendiagramm", "Zustandsdiagramm", "Verteilungsdiagramm"],
+      "mappedRules": ["UML-*", "AD-14", "AD-15", "GL-12", "DM-10"]
+    },
+    {
+      "topic": "Datenbanken",
+      "keywords": ["Datenbank", "SQL", "Normalisierung", "Primaerschluessel", "Fremdschluessel", "Transaktion", "ER-Modell", "Relation", "Datenmodell"],
+      "mappedRules": ["DM-*", "DA-*", "SD-13"]
+    },
+    {
+      "topic": "Python",
+      "keywords": ["Python", "Exception", "Datenstruktur", "Modul", "Datei", "Test", "pytest", "Implementierung"],
+      "mappedRules": ["IM-*", "GL-*", "QM-*"]
+    },
+    {
+      "topic": "Software-Engineering",
+      "keywords": ["Software-Engineering", "Vorgehensmodell", "Scrum", "Entwurf", "Implementierung", "Test", "Dokumentation", "Architektur"],
+      "mappedRules": ["EP-*", "AD-*", "QM-*", "DOK-*"]
+    },
+    {
+      "topic": "REST-API",
+      "keywords": ["REST", "API", "HTTP", "Endpunkt", "Endpoint", "Request", "Response", "Statuscode", "JSON", "Spring"],
+      "mappedRules": ["SD-*", "AD-*", "QM-*"]
+    },
+    {
+      "topic": "IT-Sicherheit",
+      "keywords": ["Sicherheit", "Datenschutz", "Authentifizierung", "Autorisierung", "Rollen", "Rechte", "Verschluesselung"],
+      "mappedRules": ["ZP-15", "SD-08", "DM-13", "QM-*"]
+    },
+    {
+      "topic": "Unit-Tests",
+      "keywords": ["Unit-Test", "JUnit", "pytest", "Testfall", "Teststrategie", "automatisierte Tests"],
+      "mappedRules": ["QM-*", "GL-13", "IM-*"]
+    },
+    {
+      "topic": "Webentwicklung",
+      "keywords": ["Webentwicklung", "Frontend", "Backend", "Client", "Server", "Browser", "API"],
+      "mappedRules": ["ZP-*", "SD-*", "AD-*"]
+    }
+  ]
+}

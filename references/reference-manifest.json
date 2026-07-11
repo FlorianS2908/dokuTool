@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "usage": "private_local_reference_library",
+  "rules": [
+    "Book files are stored locally in .data/references/books/ only.",
+    "Book files must not be committed.",
+    "Only metadata and topic mappings are stored in the repository.",
+    "References support ruleset-based review but do not replace the ruleset.",
+    "No book text, excerpts or extracted full text may be committed."
+  ],
+  "references": [
+    {
+      "id": "uml_25",
+      "title": "UML-25",
+      "fileType": "epub",
+      "expectedLocalPath": ".data/references/books/uml-25.epub",
+      "topics": [
+        "UML",
+        "Klassendiagramm",
+        "Anwendungsfalldiagramm",
+        "Aktivitaetsdiagramm",
+        "Sequenzdiagramm",
+        "Komponentendiagramm",
+        "Zustandsdiagramm",
+        "Verteilungsdiagramm"
+      ],
+      "mappedRules": [
+        "UML-*",
+        "AD-14",
+        "AD-15",
+        "GL-12",
+        "DM-10"
+      ]
+    },
+    {
+      "id": "datenbanksysteme",
+      "title": "Datenbanksysteme",
+      "fileType": "epub",
+      "expectedLocalPath": ".data/references/books/datenbanksysteme.epub",
+      "topics": [
+        "Datenbanken",
+        "relationale Datenbanken",
+        "ER-Modell",
+        "Normalisierung",
+        "Primaerschluessel",
+        "Fremdschluessel",
+        "SQL",
+        "Transaktionen",
+        "Datenmodell"
+      ],
+      "mappedRules": [
+        "DM-*",
+        "DA-*",
+        "SD-13",
+        "QS-*"
+      ]
+    },
+    {
+      "id": "einstieg_python",
+      "title": "Einstieg in Python",
+      "fileType": "epub",
+      "expectedLocalPath": ".data/references/books/einstieg-in-python.epub",
+      "topics": [
+        "Python",
+        "Datenstrukturen",
+        "Exception Handling",
+        "Dateiverarbeitung",
+        "Module",
+        "Tests",
+        "Implementierung"
+      ],
+      "mappedRules": [
+        "IM-*",
+        "GL-*",
+        "QM-*"
+      ]
+    },
+    {
+      "id": "it_handbuch_fachinformatiker",
+      "title": "IT-Handbuch fuer FachinformatikerInnen",
+      "fileType": "pdf",
+      "expectedLocalPath": ".data/references/books/it-handbuch-fachinformatikerinnen.pdf",
+      "topics": [
+        "Fachinformatiker",
+        "Software-Engineering",
+        "UML",
+        "Unit-Tests",
+        "Datenbanken",
+        "Webentwicklung",
+        "REST-API",
+        "IT-Sicherheit",
+        "Projektarbeit"
+      ],
+      "mappedRules": [
+        "EP-*",
+        "AD-*",
+        "DM-*",
+        "SD-*",
+        "QM-*",
+        "DOK-*"
+      ]
+    },
+    {
+      "id": "building_rest_api_spring",
+      "title": "Building a REST API with Spring",
+      "fileType": "pdf",
+      "expectedLocalPath": ".data/references/books/building-a-rest-api-with-spring.pdf",
+      "topics": [
+        "REST-API",
+        "Spring",
+        "Java",
+        "HTTP",
+        "JSON",
+        "Webentwicklung",
+        "Schnittstellendesign"
+      ],
+      "mappedRules": [
+        "SD-*",
+        "AD-*",
+        "IM-*",
+        "QM-*"
+      ]
+    }
+  ]
+}

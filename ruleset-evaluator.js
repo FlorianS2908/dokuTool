@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 const rulesetUrl = new URL('./rulesets/ihk_abschlussprojekt_ruleset_v1.json', import.meta.url);
 const kostenRessourcenRulesetUrl = new URL('./rulesets/kosten_ressourcen_rules_v3.json', import.meta.url);
+const fiaeRulesetV2Url = new URL('./rulesets/fiae_ruleset_v2.json', import.meta.url);
 
 export const IHK_ABSCHLUSSPROJEKT_RULESET = JSON.parse(
   readFileSync(rulesetUrl, 'utf8').replace(/^\uFEFF/, '')
@@ -9,6 +10,10 @@ export const IHK_ABSCHLUSSPROJEKT_RULESET = JSON.parse(
 
 export const KOSTEN_RESSOURCEN_RULESET_V3 = JSON.parse(
   readFileSync(kostenRessourcenRulesetUrl, 'utf8').replace(/^\uFEFF/, '')
+);
+
+export const FIAE_RULESET_V2 = JSON.parse(
+  readFileSync(fiaeRulesetV2Url, 'utf8').replace(/^\uFEFF/, '')
 );
 
 const statusScore = { gruen: 1, gelb: 0.55, rot: 0, grau: 0.35 };
