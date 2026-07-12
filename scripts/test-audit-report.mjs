@@ -32,7 +32,7 @@ addAuditStep(audit, {
   status: 'success',
   durationMs: 12,
   summary: 'Ein Kapitel erkannt.',
-  details: { apiKey: 'sk-test-secret-should-not-survive', note: 'ok' }
+  details: { apiKey: 'redacted-test-secret-should-not-survive', note: 'ok' }
 });
 assert.equal(audit.steps.length, 1, 'addAuditStep speichert Schritte nicht.');
 
