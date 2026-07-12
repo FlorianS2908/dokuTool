@@ -104,7 +104,7 @@ OPENAI_API_KEY=dein_standard_key
 API_KEY_DOKU_TOOL=dein_standard_key
 
 # Variante C:
-DEFAULT_OPENAI_API_KEY_FILE=C:\Users\Florian.Schaffer\OneDrive - Amadeus Fire AG\Desktop\api_key_ContentFactory - Kopie.txt
+DEFAULT_OPENAI_API_KEY_FILE=.\secrets\openai-api-key.txt
 ```
 
 Benutzer koennen im Profil/Setup einen eigenen OpenAI API-Key per Copy/Paste speichern. Dieser Key wird lokal verschluesselt gespeichert und nie vollstaendig an den Browser zurueckgegeben. Im Frontend wird nur eine Maske wie `sk-...abcd` angezeigt.
