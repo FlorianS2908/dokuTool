@@ -9,12 +9,15 @@ const {
   decryptApiKey,
   encryptApiKey,
   maskApiKey,
-  publicAiConfig
+  publicAiConfig,
+  buildEncryptedUserKeyConfig,
+  clearPublicSecrets
 } = await import('../src/server/ai/ai-key-store.js');
 const {
   createAiClientForUser,
   getEffectiveAiConfig,
-  getAiProviderInfo
+  getAiProviderInfo,
+  resolveDefaultApiKey
 } = await import('../src/server/ai/ai-provider.js');
 const { toPublicUser } = await import('../data-store.js');
 
@@ -37,6 +40,8 @@ try {
   const encrypted = encryptApiKey(fakeUserKey);
   assert.equal(decryptApiKey(encrypted), fakeUserKey);
   assert.equal(maskApiKey(fakeUserKey), 'tes...3456');
+  const encryptedConfig = buildEncryptedUserKeyConfig(fakeUserKey);
+  assert.equal(decryptApiKey(encryptedConfig), fakeUserKey);
 
   const publicUser = toPublicUser({
     id: 'u1',
@@ -61,6 +66,7 @@ try {
   assert.equal(publicUser.aiConfig.keyMask, 'tes...3456');
 
   assert.equal(publicAiConfig(publicUser.aiConfig).hasOwnKey, false);
+  assert.equal(clearPublicSecrets({ ...publicUser, aiConfig: encryptedConfig }).aiConfig.hasOwnKey, true);
 
   const tempDir = mkdtempSync(join(tmpdir(), 'dokutool-ai-config-'));
   const keyFile = join(tempDir, 'openai-key.txt');
@@ -74,6 +80,7 @@ try {
   let config = getEffectiveAiConfig({});
   assert.equal(config.effectiveKeySource, 'default_file');
   assert.equal(config.defaultKeyAvailable, true);
+  assert.equal(resolveDefaultApiKey().keySource, 'default_file');
 
   delete process.env.DEFAULT_OPENAI_API_KEY_FILE;
   config = getEffectiveAiConfig({});

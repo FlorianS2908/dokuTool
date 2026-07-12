@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { publicAiConfig } from './src/server/ai/ai-key-store.js';
+import { clearPublicSecrets } from './src/server/ai/ai-key-store.js';
 
 const USERS_COLLECTION = 'users';
 const SESSIONS_COLLECTION = 'sessions';
@@ -19,18 +19,7 @@ function stripJsonBom(raw) {
 }
 
 function withoutPassword(user) {
-  if (!user) return null;
-  const {
-    passwordHash,
-    passwordSalt,
-    passwordIterations,
-    aiConfig,
-    ...publicUser
-  } = user;
-  return {
-    ...publicUser,
-    aiConfig: publicAiConfig(aiConfig)
-  };
+  return clearPublicSecrets(user);
 }
 
 function compactReportEntry(entry) {

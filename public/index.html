@@ -454,6 +454,8 @@
       <nav class="tabs" aria-label="Bereiche">
         <button id="backToWorkspaceFromDokuButton" class="tab workspace-tab" type="button">Tool-Auswahl</button>
         <button class="tab active" data-tab="checker">Doku-Prüfung</button>
+        <button id="promptAssistantTabButton" class="tab" data-tab="promptAssistant">Prompt-Assistent</button>
+        <button id="auditTabButton" class="tab" data-tab="audit">Auswertung</button>
         <button id="historyTabButton" class="tab" data-tab="history">History</button>
         <button id="chatTabButton" class="tab" data-tab="chat">KI-Chat</button>
       </nav>
@@ -575,6 +577,188 @@
           </thead>
           <tbody></tbody>
         </table>
+      </section>
+    </section>
+
+    <section id="promptAssistantPanel" class="panel prompt-assistant-panel">
+      <header class="panel-header">
+        <div class="panel-title">
+          <img class="panel-logo" src="assets/dokutool-logo.svg" alt="" />
+          <div>
+            <h2>Prompt-Assistent</h2>
+            <p id="promptAssistantStatus">Doku hochladen und Kapitel-/Regel-Matrix erzeugen.</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="prompt-steps">
+        <article class="prompt-step">
+          <span>1</span>
+          <div>
+            <strong>Doku analysieren</strong>
+            <small>Kapitelstruktur und FIAE-Regeln erkennen.</small>
+          </div>
+        </article>
+        <article class="prompt-step">
+          <span>2</span>
+          <div>
+            <strong>Kapitel und Regeln waehlen</strong>
+            <small>Ohne Regel-IDs lernen zu muessen.</small>
+          </div>
+        </article>
+        <article class="prompt-step">
+          <span>3</span>
+          <div>
+            <strong>Prompt erzeugen</strong>
+            <small>Kopieren oder direkt mit KI ausfuehren.</small>
+          </div>
+        </article>
+      </section>
+
+      <form id="promptAssistantForm" class="analyze-form prompt-assistant-form">
+        <div class="grid two">
+          <label class="file-card">
+            <span>Projektdokumentation *</span>
+            <input id="promptDocumentationFile" name="documentation" type="file" accept=".docx,.pdf,.txt,.md,.markdown" required />
+            <small>DOCX, PDF, TXT oder MD</small>
+          </label>
+          <label class="file-card">
+            <span>Projektantrag</span>
+            <input id="promptApplicationFile" name="application" type="file" accept=".docx,.pdf,.txt,.md,.markdown" />
+            <small>Optional fuer Antrag-Doku-Abgleich</small>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="analyzeOutlineButton" type="submit">Kapitelstruktur analysieren</button>
+        </div>
+      </form>
+
+      <div id="promptAiStatus" class="prompt-ai-status">KI-Status wird geladen ...</div>
+
+      <section class="prompt-assistant-layout">
+        <aside class="prompt-outline-card">
+          <div class="prompt-card-header">
+            <h3>Erkannte Kapitel</h3>
+            <label class="compact-check">
+              <input id="promptCriticalOnlyToggle" type="checkbox" />
+              nur kritisch
+            </label>
+          </div>
+          <div id="promptOutlineTree" class="prompt-outline-tree empty-note">Noch keine Kapitel erkannt.</div>
+        </aside>
+
+        <section class="prompt-rule-card">
+          <div class="prompt-card-header">
+            <div>
+              <h3 id="promptSelectedChapterTitle">Kapitel-/Regel-Matrix</h3>
+              <p id="promptSelectedChapterMeta" class="status-line">Waehle nach der Analyse ein Kapitel aus.</p>
+            </div>
+            <label class="compact-check">
+              <input id="promptIncludeMissingToggle" type="checkbox" checked />
+              fehlende Regeln
+            </label>
+          </div>
+          <div id="promptRuleCards" class="prompt-rule-list empty-note">Noch keine Regeln geladen.</div>
+        </section>
+      </section>
+
+      <section class="prompt-builder-card">
+        <div class="grid two">
+          <label>
+            Aufgabe
+            <select id="promptTaskType">
+              <option value="check_chapter">Kapitel pruefen</option>
+              <option value="find_missing_content">Fehlende Inhalte finden</option>
+              <option value="improve_structure">Struktur verbessern</option>
+              <option value="create_todo_list">To-do-Liste</option>
+              <option value="check_ihk_risk">IHK-Risiko</option>
+              <option value="check_application_alignment">Antrag-Doku-Abgleich</option>
+              <option value="check_uml">UML pruefen</option>
+              <option value="check_quality_management">QS/Test pruefen</option>
+              <option value="check_data_model">Datenmodell pruefen</option>
+              <option value="custom">Freier Prompt</option>
+            </select>
+          </label>
+          <label>
+            Was soll die KI besonders beachten?
+            <input id="promptUserInstruction" placeholder="z. B. besonders auf Datenanalyse achten" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="buildPromptButton" type="button" class="secondary" disabled>Prompt erzeugen</button>
+          <button id="copyPromptButton" type="button" class="secondary" disabled>Prompt kopieren</button>
+          <button id="runPromptButton" type="button" disabled>Mit KI ausfuehren</button>
+        </div>
+        <textarea id="promptPreview" class="prompt-preview" readonly placeholder="Hier erscheint der erzeugte Prompt."></textarea>
+        <div id="promptRunAnswer" class="prompt-answer empty-note">Noch keine KI-Antwort.</div>
+      </section>
+    </section>
+
+    <section id="auditPanel" class="panel audit-panel">
+      <header class="panel-header">
+        <div class="panel-title">
+          <img class="panel-logo" src="assets/dokutool-logo.svg" alt="" />
+          <div>
+            <h2>Auswertung</h2>
+            <p id="auditStatus">Nach einer Analyse erscheint hier der Audit-Report.</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="actions audit-actions">
+        <button id="auditDownloadButton" class="secondary" type="button" disabled>Audit als JSON</button>
+      </div>
+
+      <section id="auditSummary" class="summary empty">
+        <p>Noch kein Audit-Report vorhanden.</p>
+      </section>
+
+      <section class="audit-grid">
+        <article class="audit-card">
+          <h3>Analyse-Timeline</h3>
+          <div id="auditTimeline" class="audit-timeline empty-note">Noch keine Schritte vorhanden.</div>
+        </article>
+        <article class="audit-card">
+          <h3>KI-Konsens</h3>
+          <div id="auditAiConsensus" class="audit-detail-list empty-note">Noch keine KI-Konsensdaten vorhanden.</div>
+        </article>
+      </section>
+
+      <section class="audit-card">
+        <h3>Kapitel-/Regel-Matrix</h3>
+        <div id="auditMatrix" class="audit-matrix empty-note">Noch keine Matrix vorhanden.</div>
+      </section>
+
+      <section class="audit-grid">
+        <article class="audit-card">
+          <h3>Regel-Details</h3>
+          <div id="auditRuleDetails" class="audit-detail-list empty-note">Noch keine Regeldetails vorhanden.</div>
+        </article>
+        <article class="audit-card">
+          <h3>Prompt-Auswertung</h3>
+          <div id="auditPrompts" class="audit-detail-list empty-note">Noch keine Prompt-Kontexte vorhanden.</div>
+        </article>
+      </section>
+
+      <section class="audit-card function-test-card">
+        <div class="prompt-card-header">
+          <div>
+            <h3>Funktionstests</h3>
+            <p id="functionTestsStatus" class="status-line">Noch kein Funktionstest ausgefuehrt.</p>
+          </div>
+          <label class="compact-check">
+            <input id="includeAiFunctionTests" type="checkbox" />
+            KI-Verbindung
+          </label>
+        </div>
+        <div class="actions">
+          <button id="runFunctionTestsButton" type="button">Funktionstests ausfuehren</button>
+          <button id="downloadFunctionTestsButton" type="button" class="secondary" disabled>Testbericht als JSON</button>
+        </div>
+        <div id="functionTestsSummary" class="summary mini empty">
+          <p>Noch kein Testbericht vorhanden.</p>
+        </div>
+        <div id="functionTestsGroups" class="function-test-groups empty-note">Noch keine Testgruppen vorhanden.</div>
       </section>
     </section>
 

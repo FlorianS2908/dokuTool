@@ -1,6 +1,21 @@
 import { createReviewItem } from './review-schema.js';
+import { buildArbiterReviewerPrompt } from './review-prompt-builder.js';
+import { runModelReview } from './model-review-runner.js';
 
-export async function runArbiterReviewer({ ruleId, reviews = [], conflicts = [], round = 3 }) {
+export async function runArbiterReviewer({ client = null, model = 'gpt-5.5', context = null, ruleId, reviews = [], conflicts = [], round = 3 }) {
+  if (client && context) {
+    return runModelReview({
+      client,
+      model,
+      prompt: buildArbiterReviewerPrompt(context, reviews, conflicts),
+      reviewer: 'arbiter',
+      round,
+      ruleId: context.rule?.id || ruleId,
+      fallbackReason: 'Arbiter Reviewer konnte keine valide JSON-Antwort liefern.',
+      fallbackRecommendation: context.rule?.recommendation
+    });
+  }
+
   const withEvidence = reviews.filter((review) => review.evidence?.length);
   const preferred = withEvidence.at(-1) || reviews.at(-1);
   return createReviewItem({

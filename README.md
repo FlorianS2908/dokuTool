@@ -119,6 +119,95 @@ Sicherheit:
 - Fuer stabile Verschluesselung `AI_KEY_ENCRYPTION_SECRET` setzen.
 - Reports, JSON-Exports und Excel-Exports enthalten keine API-Keys.
 
+## Prompt-Assistent
+
+Der Prompt-Assistent hilft, nach dem Upload einer Projektdokumentation gezielte KI-Prompts zu bauen, ohne dass der Nutzer Regel-IDs kennen muss.
+
+Der Ablauf:
+
+1. Die Doku wird strukturell ausgewertet.
+2. Inhaltsverzeichnis, Kapitel und Unterkapitel werden heuristisch erkannt.
+3. Kapitel werden mit passenden Regeln aus `fiae_ruleset_v2.json` verbunden.
+4. Die Regeln werden in einfache Sprache uebersetzt.
+5. Der Nutzer waehlt Kapitel, Regeln und Aufgabe aus.
+6. Das Tool erzeugt daraus einen kompakten Prompt mit Kapitelbezug, Regelbezug, Fundstellen und Statuslogik.
+
+Der Prompt-Assistent sendet keine komplette Doku blind an die KI. Prompts enthalten nur relevante Regeln, kurze Kapitelauszuege, Fundstellen und Referenzmetadaten. Der Assistent dient zum Pruefen und Nacharbeiten; er erstellt keine fertige IHK-Projektdokumentation.
+
+Wenn ein API-Key verfuegbar ist, kann der erzeugte Prompt direkt ausgefuehrt werden. Ohne API-Key kann der Prompt weiterhin erzeugt und kopiert werden.
+
+## Auswertung und Audit-Report
+
+Nach einer Analyse erscheint im DokuTool der Tab **Auswertung**. Dieser Bereich zeigt transparent, was das Tool bei der Pruefung gemacht hat:
+
+- erkannte Kapitel, Ueberschriften und Unterkapitel
+- Kapitel-/Regel-Zuordnungen inklusive Confidence
+- kurze Fundstellen und deren Qualitaet
+- Ampelstatus pro Regel
+- Referenzzuordnungen als Metadaten
+- erzeugte Prompt-Kontexte
+- KI-Reviews, Konsensdaten und Konflikte
+- interne Testberichte
+
+Der Audit-Report dient zur Qualitaetssicherung und Nachvollziehbarkeit. Er speichert keine API-Keys, keine Buchtexte und keine vollstaendige Projektdokumentation. Fundstellen werden nur als kurze Auszuege und Metadaten abgelegt.
+
+Der Excel-Bericht enthaelt zusaetzliche Audit-Blaetter:
+
+- `Audit Übersicht`
+- `Analyse Schritte`
+- `Kapitel Regel Matrix`
+- `Prompt Kontexte`
+- `KI Review Audit`
+- `Funktionstests`, wenn ein Funktionstestbericht vorhanden ist
+
+Validierung:
+
+```bash
+npm run test:audit-report
+```
+
+## Funktionstests
+
+Die Funktionstests pruefen reale Tool-Ablaeufe statt nur einzelne Hilfsfunktionen. Geprueft werden Ruleset, Referenzen, Dokument-Outline, Kapitel-/Regel-Matrix, Prompt-Assistent, KI-Konfigurationsfallback, Multi-KI-Fallback, Audit-Report, Excel-Export und Timer-Quiz-Bundle.
+
+Ausfuehrung per CLI:
+
+```bash
+npm run test:functional
+```
+
+Im Tab **Auswertung** koennen die Funktionstests auch direkt in der UI ausgefuehrt werden. Der Testbericht zeigt Erwartung, Ergebnis, Status, Dauer, Details und Empfehlung je Test. KI-Tests sind optional. Wenn kein effektiver API-Key vorhanden ist, wird der KI-Verbindungstest uebersprungen statt die Tests abbrechen zu lassen.
+
+## Multi-KI-Konsenspruefung
+
+Die Multi-KI-Pruefung nutzt das FIAE-Ruleset pro Regel als verbindlichen Kontext. Fuer kritische rote, gelbe oder hoch priorisierte Regeln wird ein kompakter Review-Kontext gebaut: Regel, Statuslogik, Basisergebnis, kurze Fundstellen, optionale Antrag-Auszuege und Referenzmetadaten.
+
+Der Ablauf:
+
+1. Primary Reviewer bewertet die Regel anhand der gelieferten Fundstellen.
+2. Counter Reviewer prueft kritisch gegen.
+3. Bei mittleren oder hohen Konflikten folgt eine Revision.
+4. Bei offenen Konflikten entscheidet ein Arbiter vorsichtig oder fordert manuelle Pruefung.
+
+Die KI darf keine Fundstellen erfinden und keine fertige Projektdokumentation schreiben. Wenn kein API-Key vorhanden ist oder eine KI-Antwort nicht valide als JSON auswertbar ist, erzeugt das Tool einen grauen Fallback mit manueller Pruefung, statt die Analyse abzubrechen.
+
+Steuerung per `.env`:
+
+```env
+MULTI_AI_MAX_RULES=12
+MULTI_AI_MAX_ROUNDS=3
+```
+
+## Datenschutz und lokale Verarbeitung
+
+- API-Keys werden nie ins Repository geschrieben.
+- User-Keys werden lokal verschluesselt gespeichert.
+- `.env`, `.data`, Buchdateien und Secrets sind von Git ausgeschlossen.
+- PDF-/EPUB-Buchdateien bleiben lokal unter `.data/references/books/`.
+- Referenzen in Berichten enthalten nur Titel und Themen, keine Buchtexte.
+- Prompts enthalten nur kurze Kapitel- und Fundstellenauszuege, nicht blind die komplette Doku.
+- Das Tool ist eine Vorpruefung und keine verbindliche Bewertung durch IHK oder Pruefungsausschuss.
+
 ## Installation unter Windows
 
 ### 1. Node.js installieren
@@ -198,7 +287,8 @@ Alternativ unter Windows `start-windows.bat` doppelklicken.
 6. KI-Pruefmodus waehlen: deaktiviert, einfache KI-Zusatzpruefung oder Multi-KI-Konsenspruefung.
 7. **Pruefung starten** klicken.
 8. Bericht im Browser pruefen. Der Bericht wird automatisch in der History des eingeloggten Nutzers gespeichert.
-9. Ueber **Excel-Bericht** einen `.xlsx`-Pruefbericht herunterladen.
+9. Im Reiter **Auswertung** Audit-Timeline, Kapitel-/Regel-Matrix, Prompt-Kontexte und Funktionstests nachvollziehen.
+10. Ueber **Excel-Bericht** einen `.xlsx`-Pruefbericht herunterladen.
 
 ## Ergebnisstatus
 

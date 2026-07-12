@@ -60,6 +60,20 @@ export function encryptApiKey(key) {
   };
 }
 
+export function buildEncryptedUserKeyConfig(apiKey, options = {}) {
+  const cleanedKey = normalizeApiKey(apiKey);
+  const timestamp = now();
+  const previous = options.existingConfig || {};
+  return {
+    provider: options.provider || PROVIDER,
+    ...encryptApiKey(cleanedKey),
+    createdAt: previous.createdAt || timestamp,
+    updatedAt: timestamp,
+    keyMask: maskApiKey(cleanedKey),
+    useOwnKey: options.useOwnKey !== false
+  };
+}
+
 export function decryptApiKey(encrypted) {
   const payload = typeof encrypted === 'string' ? { encryptedApiKey: encrypted } : encrypted;
   if (!payload?.encryptedApiKey || !payload?.iv || !payload?.authTag) {
@@ -79,7 +93,8 @@ export function decryptApiKey(encrypted) {
   return decrypted.toString('utf8');
 }
 
-export function publicAiConfig(aiConfig) {
+export function publicAiConfig(userOrAiConfig) {
+  const aiConfig = userOrAiConfig?.aiConfig || userOrAiConfig;
   const hasOwnKey = Boolean(
     aiConfig?.useOwnKey &&
     aiConfig?.encryptedApiKey &&
@@ -93,6 +108,21 @@ export function publicAiConfig(aiConfig) {
     keyMask: aiConfig?.keyMask || '',
     updatedAt: aiConfig?.updatedAt || null,
     hasOwnKey
+  };
+}
+
+export function clearPublicSecrets(user) {
+  if (!user) return null;
+  const {
+    passwordHash,
+    passwordSalt,
+    passwordIterations,
+    aiConfig,
+    ...publicUser
+  } = user;
+  return {
+    ...publicUser,
+    aiConfig: publicAiConfig(aiConfig)
   };
 }
 
@@ -112,16 +142,7 @@ export async function setUserApiKey(userId, apiKey, options = {}) {
   }
 
   const cleanedKey = normalizeApiKey(apiKey);
-  const timestamp = now();
-  const previous = options.existingConfig || {};
-  const aiConfig = {
-    provider: options.provider || PROVIDER,
-    ...encryptApiKey(cleanedKey),
-    createdAt: previous.createdAt || timestamp,
-    updatedAt: timestamp,
-    keyMask: maskApiKey(cleanedKey),
-    useOwnKey: options.useOwnKey !== false
-  };
+  const aiConfig = buildEncryptedUserKeyConfig(cleanedKey, options);
 
   return store.updateUserAiConfig(userId, aiConfig);
 }

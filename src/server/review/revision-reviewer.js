@@ -1,6 +1,21 @@
 import { createReviewItem } from './review-schema.js';
+import { buildRevisionReviewerPrompt } from './review-prompt-builder.js';
+import { runModelReview } from './model-review-runner.js';
 
-export async function runRevisionReviewer({ primaryReview, conflicts = [], round = 2 }) {
+export async function runRevisionReviewer({ client = null, model = 'gpt-5.5', context = null, primaryReview, counterReview = null, conflicts = [], round = 2 }) {
+  if (client && context) {
+    return runModelReview({
+      client,
+      model,
+      prompt: buildRevisionReviewerPrompt(context, primaryReview, counterReview, conflicts),
+      reviewer: 'revision',
+      round,
+      ruleId: context.rule?.id || primaryReview?.ruleId,
+      fallbackReason: 'Revision Reviewer konnte keine valide JSON-Antwort liefern.',
+      fallbackRecommendation: context.rule?.recommendation
+    });
+  }
+
   const criticalEvidenceConflict = conflicts.some((item) => item.type === 'evidence_conflict');
   const status = criticalEvidenceConflict && primaryReview.status === 'rot' ? 'gelb' : primaryReview.status;
   return createReviewItem({

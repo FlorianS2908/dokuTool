@@ -34,7 +34,7 @@ function readDefaultFileKey() {
   }
 }
 
-function resolveDefaultAiKey() {
+export function resolveDefaultApiKey() {
   const fileKey = readDefaultFileKey();
   if (fileKey) return fileKey;
 
@@ -74,7 +74,7 @@ function userKeyConfig(user) {
 }
 
 export function getEffectiveAiConfig(user) {
-  const defaultKey = resolveDefaultAiKey();
+  const defaultKey = resolveDefaultApiKey();
   const ownKey = userKeyConfig(user);
   const selected = ownKey?.apiKey ? ownKey : defaultKey;
   const publicConfig = publicAiConfig(user?.aiConfig);

@@ -3,6 +3,8 @@ import { evaluateFiaeRulesetV2 } from '../src/server/rules/fiae-ruleset-v2-evalu
 import { detectReviewConflicts } from '../src/server/review/conflict-detector.js';
 import { buildConsensusItem } from '../src/server/review/consensus-builder.js';
 import { createReviewItem } from '../src/server/review/review-schema.js';
+import { buildRuleReviewBatch, buildRuleReviewContext } from '../src/server/review/ruleset-context-builder.js';
+import { runPrimaryReviewer } from '../src/server/review/primary-reviewer.js';
 import { createExcel } from '../server.js';
 
 function assert(condition, message) {
@@ -65,11 +67,33 @@ assert(conflicts.some((item) => item.level === 'hoch'), 'Conflict Detector erken
 
 const consensus = buildConsensusItem({
   ruleId: 'FG-02',
+  rule: { id: 'FG-02', title: 'Inhaltsverzeichnis pruefen', category: 'Formale Grundpruefung' },
   baseResult: evaluation.results[0],
   reviews: [primary, counter],
-  conflicts
+  conflicts,
+  usedRuleContext: { statusRulesIncluded: true, evidenceCount: 1 }
 });
 assert(consensus.finalStatus, 'Consensus Builder erzeugt keinen finalStatus.');
+assert(consensus.usedRuleContext?.statusRulesIncluded, 'Consensus Item enthaelt keinen usedRuleContext.');
+
+const context = buildRuleReviewContext({
+  rule: evaluation.results.find((item) => item.ruleset?.id === 'FG-02')
+    ? undefined
+    : undefined,
+  baseResult: evaluation.results.find((item) => item.ruleset?.id === 'FG-02'),
+  sections,
+  doc
+});
+assert(context.rule.statusRules, 'buildRuleReviewContext enthaelt rule.statusRules nicht.');
+assert(context.baseResult.status, 'buildRuleReviewContext enthaelt baseResult nicht.');
+
+const batch = buildRuleReviewBatch({ baseReport: { results: evaluation.results }, sections, doc, maxItems: 6 });
+assert(batch.length > 0, 'buildRuleReviewBatch liefert keine Kandidaten.');
+assert(batch.some((item) => ['rot', 'gelb', 'grau'].includes(item.baseResult.status) || item.rule.severity === 'MAJOR'), 'buildRuleReviewBatch priorisiert keine kritischen Regeln.');
+
+const fallbackPrimary = await runPrimaryReviewer({ context, round: 1 });
+assert(fallbackPrimary.ruleId === context.rule.id, 'Reviewer-Fallback liefert falsche Regel-ID.');
+assert(fallbackPrimary.status, 'Reviewer-Fallback liefert keinen Status.');
 
 const baseReport = {
   summary: { score: 80, grade: 'Test', redCount: 0, yellowCount: 1, grayCount: 0, note: 'Test' },

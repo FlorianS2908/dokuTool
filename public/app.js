@@ -88,10 +88,14 @@ const removeAiKeyButton = document.querySelector('#removeAiKeyButton');
 
 const panels = {
   checker: document.querySelector('#checkerPanel'),
+  promptAssistant: document.querySelector('#promptAssistantPanel'),
+  audit: document.querySelector('#auditPanel'),
   history: document.querySelector('#historyPanel'),
   chat: document.querySelector('#chatPanel')
 };
 const tabs = document.querySelectorAll('.tab[data-tab]');
+const promptAssistantTabButton = document.querySelector('#promptAssistantTabButton');
+const auditTabButton = document.querySelector('#auditTabButton');
 const quizNavButtons = document.querySelectorAll('.quiz-sidebar [data-quiz-target]');
 const historyTabButton = document.querySelector('#historyTabButton');
 const chatTabButton = document.querySelector('#chatTabButton');
@@ -120,6 +124,20 @@ const downloadExcelButton = document.querySelector('#downloadExcelButton');
 const downloadJsonButton = document.querySelector('#downloadJsonButton');
 const ihkProfileSelect = document.querySelector('#ihkProfile');
 const aiReviewModeSelect = document.querySelector('#aiReviewMode');
+const auditStatus = document.querySelector('#auditStatus');
+const auditDownloadButton = document.querySelector('#auditDownloadButton');
+const auditSummary = document.querySelector('#auditSummary');
+const auditTimeline = document.querySelector('#auditTimeline');
+const auditMatrix = document.querySelector('#auditMatrix');
+const auditRuleDetails = document.querySelector('#auditRuleDetails');
+const auditPrompts = document.querySelector('#auditPrompts');
+const auditAiConsensus = document.querySelector('#auditAiConsensus');
+const functionTestsStatus = document.querySelector('#functionTestsStatus');
+const runFunctionTestsButton = document.querySelector('#runFunctionTestsButton');
+const includeAiFunctionTests = document.querySelector('#includeAiFunctionTests');
+const downloadFunctionTestsButton = document.querySelector('#downloadFunctionTestsButton');
+const functionTestsSummary = document.querySelector('#functionTestsSummary');
+const functionTestsGroups = document.querySelector('#functionTestsGroups');
 
 const historyStatus = document.querySelector('#historyStatus');
 const historyList = document.querySelector('#historyList');
@@ -134,6 +152,23 @@ const clearButton = document.querySelector('#clearButton');
 const statusElement = document.querySelector('#status');
 const modeElement = document.querySelector('#mode');
 const contextElement = document.querySelector('#context');
+const promptAssistantForm = document.querySelector('#promptAssistantForm');
+const analyzeOutlineButton = document.querySelector('#analyzeOutlineButton');
+const promptAssistantStatus = document.querySelector('#promptAssistantStatus');
+const promptAiStatus = document.querySelector('#promptAiStatus');
+const promptOutlineTree = document.querySelector('#promptOutlineTree');
+const promptRuleCards = document.querySelector('#promptRuleCards');
+const promptSelectedChapterTitle = document.querySelector('#promptSelectedChapterTitle');
+const promptSelectedChapterMeta = document.querySelector('#promptSelectedChapterMeta');
+const promptCriticalOnlyToggle = document.querySelector('#promptCriticalOnlyToggle');
+const promptIncludeMissingToggle = document.querySelector('#promptIncludeMissingToggle');
+const promptTaskType = document.querySelector('#promptTaskType');
+const promptUserInstruction = document.querySelector('#promptUserInstruction');
+const buildPromptButton = document.querySelector('#buildPromptButton');
+const copyPromptButton = document.querySelector('#copyPromptButton');
+const runPromptButton = document.querySelector('#runPromptButton');
+const promptPreview = document.querySelector('#promptPreview');
+const promptRunAnswer = document.querySelector('#promptRunAnswer');
 
 let currentUser = null;
 let authMode = 'login';
@@ -143,6 +178,11 @@ let quizHistory = [];
 let quizChatHistory = [];
 let quizConfig = null;
 let aiConfig = null;
+let promptAssistantData = null;
+let selectedPromptChapterId = '';
+let selectedPromptRuleIds = new Set();
+let currentPromptMeta = null;
+let currentFunctionTestReport = null;
 let ihkProfilesLoaded = false;
 let dokuSettings = { history: true, chat: true };
 let quizSettings = { dashboard: true, pool: true, history: true, chat: true };
@@ -174,8 +214,29 @@ function statusLabel(status) {
     gruen: 'Gruen',
     gelb: 'Gelb',
     rot: 'Rot',
-    grau: 'Grau'
+    grau: 'Grau',
+    success: 'Erfolgreich',
+    warning: 'Warnung',
+    error: 'Fehler',
+    skipped: 'Uebersprungen',
+    passed: 'Bestanden',
+    failed: 'Fehler'
   }[status] || status;
+}
+
+function statusBadgeClass(status) {
+  return {
+    success: 'gruen',
+    passed: 'gruen',
+    warning: 'gelb',
+    error: 'rot',
+    failed: 'rot',
+    skipped: 'grau',
+    gruen: 'gruen',
+    gelb: 'gelb',
+    rot: 'rot',
+    grau: 'grau'
+  }[status] || 'grau';
 }
 
 function escapeHtml(value) {
@@ -283,6 +344,167 @@ async function loadAiConfig() {
     aiConfigStatus.textContent = 'KI-Status konnte nicht geladen werden.';
     aiConfigMessage.textContent = error.message;
   }
+}
+
+function renderPromptAiStatus(config = aiConfig) {
+  if (!promptAiStatus) return;
+  if (!config) {
+    promptAiStatus.textContent = 'KI-Status noch nicht geladen. Prompt kann trotzdem erzeugt und kopiert werden.';
+    return;
+  }
+  if (config.hasOwnKey) {
+    promptAiStatus.textContent = `Eigener Key aktiv${config.keyMask ? ` (${config.keyMask})` : ''}. Prompt kann direkt ausgefuehrt werden.`;
+  } else if (config.usingDefaultKey) {
+    promptAiStatus.textContent = `Standard-Key aktiv (${aiSourceLabel(config.effectiveKeySource)}). Prompt kann direkt ausgefuehrt werden.`;
+  } else {
+    promptAiStatus.textContent = 'Kein Key verfuegbar. Prompt kann erzeugt und kopiert werden, aber nicht direkt ausgefuehrt werden.';
+  }
+}
+
+async function loadPromptAiConfig() {
+  try {
+    const config = await apiFetch('/api/ai-config');
+    aiConfig = config;
+    renderPromptAiStatus(config);
+  } catch {
+    renderPromptAiStatus(null);
+  }
+}
+
+function flattenPromptChapters(chapters = []) {
+  const result = [];
+  for (const chapter of chapters) {
+    result.push(chapter);
+    result.push(...flattenPromptChapters(chapter.children || []));
+  }
+  return result;
+}
+
+function promptMatrixEntry(chapterId = selectedPromptChapterId) {
+  return (promptAssistantData?.matrix || []).find((entry) => entry.chapterId === chapterId) || null;
+}
+
+function selectedPromptChapter() {
+  const chapters = flattenPromptChapters(promptAssistantData?.outline?.chapters || []);
+  return chapters.find((chapter) => chapter.id === selectedPromptChapterId) || chapters[0] || null;
+}
+
+function promptStatusHint(status) {
+  return {
+    gruen: 'passt gut',
+    gelb: 'nachschaerfen',
+    rot: 'fehlt wahrscheinlich',
+    grau: 'manuell pruefen'
+  }[status] || 'manuell pruefen';
+}
+
+function selectedPromptRuleIdsArray() {
+  return [...selectedPromptRuleIds];
+}
+
+function updatePromptButtons() {
+  const hasData = Boolean(promptAssistantData && selectedPromptChapterId);
+  buildPromptButton.disabled = !hasData;
+  runPromptButton.disabled = !hasData;
+  copyPromptButton.disabled = !promptPreview.value;
+}
+
+function renderPromptOutlineTree() {
+  if (!promptOutlineTree) return;
+  const chapters = flattenPromptChapters(promptAssistantData?.outline?.chapters || []);
+  if (!chapters.length) {
+    promptOutlineTree.innerHTML = 'Noch keine Kapitel erkannt.';
+    promptOutlineTree.classList.add('empty-note');
+    updatePromptButtons();
+    return;
+  }
+
+  promptOutlineTree.classList.remove('empty-note');
+  promptOutlineTree.innerHTML = chapters.map((chapter) => {
+    const entry = promptMatrixEntry(chapter.id);
+    const criticalCount = (entry?.matchedRules || []).filter((rule) => rule.status === 'rot' || rule.severity === 'hoch').length;
+    const isActive = chapter.id === selectedPromptChapterId;
+    return `
+      <button class="prompt-chapter-button ${isActive ? 'active' : ''}" type="button" data-prompt-chapter="${escapeHtml(chapter.id)}" style="--level:${Math.max(0, (chapter.level || 1) - 1)}">
+        <span>${escapeHtml(chapter.number || '')} ${escapeHtml(chapter.title || 'Kapitel')}</span>
+        <small>${escapeHtml(entry?.detectedMeaning || 'Dokumentabschnitt')} · ${criticalCount} kritisch</small>
+      </button>
+    `;
+  }).join('');
+
+  promptOutlineTree.querySelectorAll('[data-prompt-chapter]').forEach((button) => {
+    button.addEventListener('click', () => {
+      selectedPromptChapterId = button.dataset.promptChapter;
+      selectedPromptRuleIds = new Set();
+      currentPromptMeta = null;
+      promptPreview.value = '';
+      promptRunAnswer.textContent = 'Noch keine KI-Antwort.';
+      renderPromptAssistant();
+    });
+  });
+}
+
+function renderPromptRuleCards() {
+  const entry = promptMatrixEntry();
+  if (!promptRuleCards) return;
+  if (!entry) {
+    promptRuleCards.innerHTML = 'Waehle nach der Analyse ein Kapitel aus.';
+    promptRuleCards.classList.add('empty-note');
+    updatePromptButtons();
+    return;
+  }
+
+  promptSelectedChapterTitle.textContent = `${entry.chapterNumber || ''} ${entry.chapterTitle || 'Kapitel'}`.trim();
+  promptSelectedChapterMeta.textContent = `${entry.detectedMeaning || 'Dokumentabschnitt'} · Sicherheit ${Math.round((entry.confidence || 0) * 100)}% · ${entry.wordCount || 0} Woerter`;
+
+  const criticalOnly = promptCriticalOnlyToggle.checked;
+  const includeMissing = promptIncludeMissingToggle.checked;
+  const matched = (entry.matchedRules || [])
+    .filter((rule) => !criticalOnly || rule.status === 'rot' || rule.status === 'gelb' || rule.severity === 'hoch');
+  const missing = includeMissing
+    ? (entry.missingExpectedRules || []).map((rule) => ({ ...rule, status: 'rot', severity: 'hoch', missing: true }))
+    : [];
+  const rules = [...matched, ...missing];
+
+  if (!rules.length) {
+    promptRuleCards.innerHTML = '<p class="empty-note">Keine Regeln fuer diese Filterauswahl.</p>';
+    promptRuleCards.classList.remove('empty-note');
+    updatePromptButtons();
+    return;
+  }
+
+  promptRuleCards.classList.remove('empty-note');
+  promptRuleCards.innerHTML = rules.map((rule) => {
+    const id = rule.ruleId;
+    const checked = selectedPromptRuleIds.has(id) ? 'checked' : '';
+    return `
+      <article class="prompt-rule-item ${escapeHtml(rule.status || 'grau')}">
+        <label class="prompt-rule-check">
+          <input type="checkbox" data-prompt-rule="${escapeHtml(id)}" ${checked} />
+          <span>
+            <strong>${escapeHtml(rule.simpleTitle || rule.title || id)}</strong>
+            <small>${escapeHtml(promptStatusHint(rule.status))} · ${escapeHtml(id)} · ${escapeHtml(rule.severity || 'mittel')}</small>
+          </span>
+        </label>
+        <p>${escapeHtml(rule.simpleExplanation || rule.reason || 'Regelbezogene Pruefung.')}</p>
+        ${rule.evidence && rule.evidence !== '-' ? `<small class="prompt-evidence">${escapeHtml(rule.evidence)}</small>` : ''}
+      </article>
+    `;
+  }).join('');
+
+  promptRuleCards.querySelectorAll('[data-prompt-rule]').forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) selectedPromptRuleIds.add(checkbox.dataset.promptRule);
+      else selectedPromptRuleIds.delete(checkbox.dataset.promptRule);
+      updatePromptButtons();
+    });
+  });
+  updatePromptButtons();
+}
+
+function renderPromptAssistant() {
+  renderPromptOutlineTree();
+  renderPromptRuleCards();
 }
 
 function setWorkspaceTrack(track) {
@@ -502,6 +724,7 @@ function selectDokuTab(tabName) {
   Object.values(panels).forEach((panel) => panel.classList.remove('visible'));
   panels[tabName].classList.add('visible');
   if (tabName === 'history') loadHistory();
+  if (tabName === 'promptAssistant') loadPromptAiConfig();
 }
 
 function quizSettingsKey() {
@@ -1136,6 +1359,18 @@ function setAnalyzeLoading(isLoading) {
   analyzeStatus.textContent = isLoading ? 'Dokument wird geprueft ...' : 'Bereit';
 }
 
+function promptAssistantPayload() {
+  return {
+    taskType: promptTaskType.value,
+    chapterId: selectedPromptChapterId,
+    selectedRuleIds: selectedPromptRuleIdsArray(),
+    userInstruction: promptUserInstruction.value,
+    includeMissingRules: promptIncludeMissingToggle.checked,
+    outline: promptAssistantData?.outline,
+    matrix: promptAssistantData?.matrix || []
+  };
+}
+
 async function loadIhkProfiles() {
   if (ihkProfilesLoaded || !ihkProfileSelect) return;
   try {
@@ -1187,10 +1422,270 @@ function renderResults(report) {
   }
 }
 
+function renderSummaryCards(container, cards = [], emptyText = 'Noch keine Daten vorhanden.') {
+  if (!container) return;
+  if (!cards.length) {
+    container.className = 'summary empty';
+    container.innerHTML = `<p>${escapeHtml(emptyText)}</p>`;
+    return;
+  }
+  container.classList.remove('empty');
+  container.innerHTML = cards.map((card) => `
+    <article class="metric ${card.status ? `metric-${escapeHtml(statusBadgeClass(card.status))}` : ''}">
+      <strong>${escapeHtml(card.value)}</strong>
+      <span>${escapeHtml(card.label)}</span>
+    </article>
+  `).join('');
+}
+
+function auditSummaryCards(audit = {}) {
+  const summary = audit.summary || {};
+  return [
+    { label: 'Gesamtscore', value: `${summary.score || 0}%` },
+    { label: 'Gepruefte Regeln', value: summary.mappedRuleCount || audit.ruleMappings?.length || 0 },
+    { label: 'Rot', value: summary.redCount || 0, status: 'rot' },
+    { label: 'Gelb', value: summary.yellowCount || 0, status: 'gelb' },
+    { label: 'Grau', value: summary.grayCount || 0, status: 'grau' },
+    { label: 'Kapitel', value: audit.outline?.chapterCount || 0 },
+    { label: 'KI genutzt', value: summary.aiUsed ? 'Ja' : 'Nein' },
+    { label: 'Manuelle Pruefung', value: summary.manualReviewCount || 0 }
+  ];
+}
+
+function renderAuditTimeline(audit = {}) {
+  if (!auditTimeline) return;
+  const steps = audit.steps || [];
+  if (!steps.length) {
+    auditTimeline.innerHTML = 'Noch keine Schritte vorhanden.';
+    auditTimeline.classList.add('empty-note');
+    return;
+  }
+  auditTimeline.classList.remove('empty-note');
+  auditTimeline.innerHTML = steps.map((step) => `
+    <article class="audit-step ${escapeHtml(statusBadgeClass(step.status))}">
+      <span class="audit-dot"></span>
+      <div>
+        <strong>${escapeHtml(step.label)}</strong>
+        <small><span class="badge ${escapeHtml(statusBadgeClass(step.status))}">${escapeHtml(statusLabel(step.status))}</span> ${escapeHtml(step.durationMs || 0)} ms</small>
+        <p>${escapeHtml(step.summary || '')}</p>
+      </div>
+    </article>
+  `).join('');
+}
+
+function ruleEvidenceFor(audit, ruleId) {
+  return (audit.evidence || []).filter((item) => item.ruleId === ruleId);
+}
+
+function renderAuditMatrix(audit = {}) {
+  if (!auditMatrix) return;
+  const mappings = audit.ruleMappings || [];
+  if (!mappings.length) {
+    auditMatrix.innerHTML = 'Noch keine Matrix vorhanden.';
+    auditMatrix.classList.add('empty-note');
+    return;
+  }
+  auditMatrix.classList.remove('empty-note');
+  auditMatrix.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Kapitel</th>
+          <th>Erkannte Bedeutung</th>
+          <th>Regel</th>
+          <th>Status</th>
+          <th>Fundstellenqualitaet</th>
+          <th>Empfehlung</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${mappings.slice(0, 120).map((mapping) => {
+          const evidence = ruleEvidenceFor(audit, mapping.ruleId);
+          const quality = evidence.some((item) => item.evidenceQuality === 'strong')
+            ? 'strong'
+            : evidence.some((item) => item.evidenceQuality === 'medium')
+              ? 'medium'
+              : evidence.length ? 'weak' : 'none';
+          const recommendation = mapping.status === 'rot'
+            ? 'Fehlenden Inhalt ergaenzen.'
+            : mapping.status === 'gelb'
+              ? 'Fundstelle und fachliche Tiefe verbessern.'
+              : mapping.status === 'grau'
+                ? 'Manuell pruefen.'
+                : 'Plausibel belegt.';
+          return `
+            <tr>
+              <td>${escapeHtml(mapping.chapterTitle || '-')}</td>
+              <td>${escapeHtml(mapping.detectedMeaning || '-')}</td>
+              <td><strong>${escapeHtml(mapping.ruleId || '-')}</strong><br><small>${escapeHtml(mapping.ruleTitle || '')}</small></td>
+              <td><span class="badge ${escapeHtml(statusBadgeClass(mapping.status))}">${escapeHtml(statusLabel(mapping.status))}</span></td>
+              <td>${escapeHtml(quality)}</td>
+              <td>${escapeHtml(recommendation)}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderAuditRuleDetails(audit = {}) {
+  if (!auditRuleDetails) return;
+  const mappings = audit.ruleMappings || [];
+  if (!mappings.length) {
+    auditRuleDetails.innerHTML = 'Noch keine Regeldetails vorhanden.';
+    auditRuleDetails.classList.add('empty-note');
+    return;
+  }
+  auditRuleDetails.classList.remove('empty-note');
+  auditRuleDetails.innerHTML = mappings.slice(0, 28).map((mapping) => {
+    const evidence = ruleEvidenceFor(audit, mapping.ruleId);
+    const references = (audit.references || []).filter((item) => item.ruleId === mapping.ruleId);
+    const reviews = (audit.aiReviews || []).filter((item) => item.ruleId === mapping.ruleId);
+    return `
+      <details class="audit-detail">
+        <summary>
+          <span>${escapeHtml(mapping.ruleId)} - ${escapeHtml(mapping.ruleTitle || 'Regel')}</span>
+          <span class="badge ${escapeHtml(statusBadgeClass(mapping.status))}">${escapeHtml(statusLabel(mapping.status))}</span>
+        </summary>
+        <p><strong>Kapitel:</strong> ${escapeHtml(mapping.chapterTitle || '-')}</p>
+        <p><strong>Grund:</strong> ${escapeHtml(mapping.mappingReason || '-')}</p>
+        <p><strong>Confidence:</strong> ${Math.round((mapping.confidence || 0) * 100)}%</p>
+        <p><strong>Fundstelle:</strong> ${escapeHtml(evidence[0] ? `${evidence[0].section}: ${evidence[0].quote}` : '-')}</p>
+        <p><strong>Referenzen:</strong> ${escapeHtml(references.map((item) => item.title).join(', ') || '-')}</p>
+        <p><strong>KI beteiligt:</strong> ${reviews.length ? 'ja' : 'nein'}</p>
+      </details>
+    `;
+  }).join('');
+}
+
+function renderAuditPrompts(audit = {}) {
+  if (!auditPrompts) return;
+  const prompts = audit.prompts || [];
+  if (!prompts.length) {
+    auditPrompts.innerHTML = 'Noch keine Prompt-Kontexte vorhanden.';
+    auditPrompts.classList.add('empty-note');
+    return;
+  }
+  auditPrompts.classList.remove('empty-note');
+  auditPrompts.innerHTML = prompts.map((promptMeta, index) => `
+    <details class="audit-detail">
+      <summary>
+        <span>${escapeHtml(promptMeta.title || 'Prompt')}</span>
+        <span>${escapeHtml(promptMeta.estimatedContextSize || 0)} Zeichen</span>
+      </summary>
+      <p><strong>TaskType:</strong> ${escapeHtml(promptMeta.taskType || '-')}</p>
+      <p><strong>Regeln:</strong> ${escapeHtml((promptMeta.includedRuleIds || []).join(', ') || '-')}</p>
+      <p><strong>Kapitel:</strong> ${escapeHtml((promptMeta.includedChapterIds || []).join(', ') || '-')}</p>
+      <p><strong>Warnungen:</strong> ${escapeHtml((promptMeta.warnings || []).join(' | ') || '-')}</p>
+      <pre class="audit-prompt-text">${escapeHtml(promptMeta.promptExcerpt || '')}</pre>
+      <button class="secondary audit-copy-prompt" type="button" data-audit-prompt="${index}">Prompt kopieren</button>
+    </details>
+  `).join('');
+
+  auditPrompts.querySelectorAll('[data-audit-prompt]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const promptMeta = prompts[Number(button.dataset.auditPrompt)];
+      try {
+        await navigator.clipboard.writeText(promptMeta?.promptExcerpt || '');
+        auditStatus.textContent = 'Prompt-Auszug kopiert.';
+      } catch {
+        auditStatus.textContent = 'Prompt konnte nicht automatisch kopiert werden.';
+      }
+    });
+  });
+}
+
+function renderAuditAiConsensus(audit = {}) {
+  if (!auditAiConsensus) return;
+  const reviews = audit.aiReviews || [];
+  const conflicts = audit.conflicts || [];
+  if (!reviews.length && !conflicts.length) {
+    auditAiConsensus.innerHTML = 'Keine KI-Konsensdaten vorhanden.';
+    auditAiConsensus.classList.add('empty-note');
+    return;
+  }
+  auditAiConsensus.classList.remove('empty-note');
+  auditAiConsensus.innerHTML = `
+    <div class="audit-mini-grid">
+      <article><strong>${reviews.length}</strong><span>Reviews</span></article>
+      <article><strong>${conflicts.length}</strong><span>Konflikte</span></article>
+      <article><strong>${reviews.filter((item) => item.manualReviewRequired).length}</strong><span>Manuell</span></article>
+    </div>
+    ${conflicts.length ? `<h4>Konflikte</h4>${conflicts.slice(0, 10).map((conflict) => `
+      <p><span class="badge ${conflict.level === 'hoch' ? 'rot' : 'gelb'}">${escapeHtml(conflict.level)}</span> ${escapeHtml(conflict.ruleId)} - ${escapeHtml(conflict.description)}</p>
+    `).join('')}` : '<p>Keine offenen Konflikte dokumentiert.</p>'}
+  `;
+}
+
+function renderFunctionTestReport(report) {
+  currentFunctionTestReport = report || null;
+  if (!functionTestsSummary || !functionTestsGroups) return;
+  if (!report) {
+    functionTestsSummary.className = 'summary mini empty';
+    functionTestsSummary.innerHTML = '<p>Noch kein Testbericht vorhanden.</p>';
+    functionTestsGroups.innerHTML = 'Noch keine Testgruppen vorhanden.';
+    functionTestsGroups.classList.add('empty-note');
+    downloadFunctionTestsButton.disabled = true;
+    return;
+  }
+
+  renderSummaryCards(functionTestsSummary, report.summaryCards || [], 'Noch kein Testbericht vorhanden.');
+  functionTestsSummary.classList.add('mini');
+  functionTestsGroups.classList.remove('empty-note');
+  functionTestsGroups.innerHTML = (report.groups || []).map((group) => `
+    <section class="function-test-group">
+      <h4>${escapeHtml(group.category)}</h4>
+      ${(group.tests || []).map((test) => `
+        <details class="audit-detail function-test ${escapeHtml(statusBadgeClass(test.status))}">
+          <summary>
+            <span>${escapeHtml(test.id)} - ${escapeHtml(test.name)}</span>
+            <span class="badge ${escapeHtml(statusBadgeClass(test.status))}">${escapeHtml(statusLabel(test.status))}</span>
+          </summary>
+          <p><strong>Erwartung:</strong> ${escapeHtml(test.expected || '-')}</p>
+          <p><strong>Ergebnis:</strong> ${escapeHtml(test.actual || '-')}</p>
+          <p><strong>Dauer:</strong> ${escapeHtml(test.durationMs || 0)} ms</p>
+          <p><strong>Empfehlung:</strong> ${escapeHtml(test.recommendation || '-')}</p>
+          <pre>${escapeHtml(JSON.stringify(test.details || {}, null, 2))}</pre>
+        </details>
+      `).join('')}
+    </section>
+  `).join('');
+  functionTestsStatus.textContent = `${report.summary?.passed || 0}/${report.summary?.total || 0} Funktionstests bestanden.`;
+  downloadFunctionTestsButton.disabled = false;
+}
+
+function renderAuditReport(report) {
+  const audit = report?.auditReport || null;
+  if (!audit) {
+    auditStatus.textContent = 'Noch kein Audit-Report vorhanden.';
+    auditDownloadButton.disabled = true;
+    renderSummaryCards(auditSummary, [], 'Noch kein Audit-Report vorhanden.');
+    renderAuditTimeline({});
+    renderAuditMatrix({});
+    renderAuditRuleDetails({});
+    renderAuditPrompts({});
+    renderAuditAiConsensus({});
+    renderFunctionTestReport(null);
+    return;
+  }
+
+  auditStatus.textContent = `Audit vom ${formatDate(audit.createdAt)} geladen.`;
+  auditDownloadButton.disabled = false;
+  renderSummaryCards(auditSummary, auditSummaryCards(audit), 'Noch kein Audit-Report vorhanden.');
+  renderAuditTimeline(audit);
+  renderAuditMatrix(audit);
+  renderAuditRuleDetails(audit);
+  renderAuditPrompts(audit);
+  renderAuditAiConsensus(audit);
+  renderFunctionTestReport(audit.testReport || null);
+}
+
 function selectReport(report) {
   currentReport = report;
   renderSummary(report);
   renderResults(report);
+  renderAuditReport(report);
   downloadExcelButton.disabled = false;
   downloadJsonButton.disabled = false;
 }
@@ -1205,6 +1700,105 @@ function downloadBlob(blob, fileName) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+promptAssistantForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  analyzeOutlineButton.disabled = true;
+  promptAssistantStatus.textContent = 'Kapitel und Regeln werden analysiert ...';
+  promptPreview.value = '';
+  promptRunAnswer.textContent = 'Noch keine KI-Antwort.';
+  currentPromptMeta = null;
+
+  try {
+    const formData = new FormData(promptAssistantForm);
+    const response = await fetch('/api/prompt-assistant/analyze-outline', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin'
+    });
+    const data = await readJson(response);
+    if (response.status === 401) showAuth('Bitte einloggen, um den Prompt-Assistenten zu nutzen.');
+    if (!response.ok) throw new Error(data.error || 'Kapitelanalyse fehlgeschlagen.');
+
+    promptAssistantData = data;
+    aiConfig = data.aiConfig || aiConfig;
+    renderPromptAiStatus(aiConfig);
+    const chapters = flattenPromptChapters(data.outline?.chapters || []);
+    selectedPromptChapterId = chapters[0]?.id || '';
+    const firstEntry = promptMatrixEntry(selectedPromptChapterId);
+    selectedPromptRuleIds = new Set((firstEntry?.matchedRules || [])
+      .filter((rule) => rule.status === 'rot' || rule.status === 'gelb' || rule.severity === 'hoch')
+      .slice(0, 5)
+      .map((rule) => rule.ruleId));
+    renderPromptAssistant();
+    promptAssistantStatus.textContent = `${data.summary?.chapterCount || 0} Kapitel erkannt, ${data.summary?.mappedRuleCount || 0} Regeln zugeordnet.`;
+  } catch (error) {
+    promptAssistantStatus.textContent = error.message;
+  } finally {
+    analyzeOutlineButton.disabled = false;
+  }
+});
+
+promptCriticalOnlyToggle?.addEventListener('change', renderPromptRuleCards);
+promptIncludeMissingToggle?.addEventListener('change', renderPromptRuleCards);
+
+buildPromptButton?.addEventListener('click', async () => {
+  buildPromptButton.disabled = true;
+  promptAssistantStatus.textContent = 'Prompt wird erzeugt ...';
+  try {
+    const data = await apiFetch('/api/prompt-assistant/build-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(promptAssistantPayload())
+    });
+    currentPromptMeta = data.prompt;
+    promptPreview.value = data.prompt?.prompt || '';
+    aiConfig = data.aiConfig || aiConfig;
+    renderPromptAiStatus(aiConfig);
+    promptAssistantStatus.textContent = `Prompt erzeugt. ${data.prompt?.includedRuleIds?.length || 0} Regel(n) enthalten.`;
+  } catch (error) {
+    promptAssistantStatus.textContent = error.message;
+  } finally {
+    buildPromptButton.disabled = false;
+    updatePromptButtons();
+  }
+});
+
+copyPromptButton?.addEventListener('click', async () => {
+  if (!promptPreview.value) return;
+  try {
+    await navigator.clipboard.writeText(promptPreview.value);
+    promptAssistantStatus.textContent = 'Prompt kopiert.';
+  } catch {
+    promptPreview.select();
+    promptAssistantStatus.textContent = 'Prompt ist markiert und kann kopiert werden.';
+  }
+});
+
+runPromptButton?.addEventListener('click', async () => {
+  runPromptButton.disabled = true;
+  promptAssistantStatus.textContent = 'Prompt wird mit KI ausgefuehrt ...';
+  promptRunAnswer.textContent = 'KI arbeitet ...';
+  try {
+    const data = await apiFetch('/api/prompt-assistant/run-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(promptAssistantPayload())
+    });
+    currentPromptMeta = data.prompt || data.promptMeta || currentPromptMeta;
+    promptPreview.value = data.prompt?.prompt || promptPreview.value;
+    promptRunAnswer.textContent = data.executed
+      ? data.answer
+      : (data.message || 'Keine KI ausgefuehrt. Prompt kann kopiert werden.');
+    promptAssistantStatus.textContent = data.executed ? 'KI-Antwort erhalten.' : 'Prompt erzeugt, aber nicht ausgefuehrt.';
+  } catch (error) {
+    promptRunAnswer.textContent = error.message;
+    promptAssistantStatus.textContent = 'KI-Ausfuehrung fehlgeschlagen.';
+  } finally {
+    runPromptButton.disabled = false;
+    updatePromptButtons();
+  }
+});
 
 analyzeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -1273,6 +1867,37 @@ downloadExcelButton.addEventListener('click', async () => {
   } finally {
     downloadExcelButton.disabled = false;
   }
+});
+
+auditDownloadButton?.addEventListener('click', () => {
+  if (!currentReport?.auditReport) return;
+  downloadBlob(new Blob([JSON.stringify(currentReport.auditReport, null, 2)], { type: 'application/json' }), 'ihk-audit-report.json');
+});
+
+runFunctionTestsButton?.addEventListener('click', async () => {
+  runFunctionTestsButton.disabled = true;
+  functionTestsStatus.textContent = 'Funktionstests laufen ...';
+  try {
+    const report = await apiFetch('/api/audit/function-tests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ includeAi: includeAiFunctionTests?.checked || false })
+    });
+    if (currentReport?.auditReport) {
+      currentReport.auditReport.testReport = report;
+    }
+    renderFunctionTestReport(report);
+    if (currentReport?.auditReport) renderAuditReport(currentReport);
+  } catch (error) {
+    functionTestsStatus.textContent = error.message;
+  } finally {
+    runFunctionTestsButton.disabled = false;
+  }
+});
+
+downloadFunctionTestsButton?.addEventListener('click', () => {
+  if (!currentFunctionTestReport) return;
+  downloadBlob(new Blob([JSON.stringify(currentFunctionTestReport, null, 2)], { type: 'application/json' }), 'ihk-funktionstest-bericht.json');
 });
 
 async function loadHistory() {

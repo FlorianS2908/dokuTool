@@ -10,15 +10,33 @@ import { createHmac, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypt
 import { fileURLToPath } from 'node:url';
 import { createDataStore, toPublicUser } from './data-store.js';
 import { GENERAL_IHK_RULES, getIhkRuleProfile, ihkProfilesForClient } from './ihk-rules.js';
-import { evaluateAbschlussprojektRuleset } from './ruleset-evaluator.js';
+import { evaluateAbschlussprojektRuleset, FIAE_RULESET_V2 } from './ruleset-evaluator.js';
 import { extractDocumentSections } from './src/server/analysis/document-sections.js';
+import { extractDocumentOutline } from './src/server/analysis/document-outline.js';
 import { evaluateFiaeRulesetV2 } from './src/server/rules/fiae-ruleset-v2-evaluator.js';
+import { mapRulesToOutline } from './src/server/rules/rule-outline-mapper.js';
 import { runAiConsensusReview } from './src/server/review/ai-review-orchestrator.js';
 import { searchReferenceMetadata, getReferenceTopics } from './src/server/references/reference-search.js';
 import { scanLocalReferences } from './src/server/references/reference-scanner.js';
 import { securityHeaders } from './src/server/security.js';
 import { createAiClientForUser, getAiProviderInfo, getEffectiveAiConfig, hasEffectiveAiKey } from './src/server/ai/ai-provider.js';
 import { clearUserApiKey, encryptApiKey, maskApiKey, setUserApiKey } from './src/server/ai/ai-key-store.js';
+import { buildUserPrompt } from './src/server/prompting/prompt-builder.js';
+import { PROMPT_TEMPLATES } from './src/server/prompting/prompt-templates.js';
+import {
+  addAiReviewAudit,
+  addAuditStep,
+  addConflictAudit,
+  addEvidenceAudit,
+  addPromptAudit,
+  addReferenceAudit,
+  addRuleMappingAudit,
+  createAnalysisAudit,
+  finalizeAudit
+} from './src/server/audit/analysis-audit-log.js';
+import { buildVisualReportModel } from './src/server/audit/visual-report-model.js';
+import { runFunctionalTests } from './src/server/tests/function-test-runner.js';
+import { buildFunctionalTestReport } from './src/server/tests/function-test-report.js';
 import {
   loadQuizQuestionPools,
   loadQuizQuestions,
@@ -210,6 +228,288 @@ function validateApiKeyInput(value) {
     return { error: 'Der API-Key ist zu kurz.' };
   }
   return { apiKey: value };
+}
+
+function flattenOutlineChapters(chapters = []) {
+  const result = [];
+  for (const chapter of Array.isArray(chapters) ? chapters : []) {
+    result.push(chapter);
+    result.push(...flattenOutlineChapters(chapter.children || []));
+  }
+  return result;
+}
+
+function buildPromptAssistantInput(body = {}) {
+  const matrix = Array.isArray(body.matrix) ? body.matrix : [];
+  const chapters = flattenOutlineChapters(body.outline?.chapters || []);
+  const chapter = chapters.find((item) => item.id === body.chapterId)
+    || matrix.find((item) => item.chapterId === body.chapterId)
+    || chapters[0]
+    || {};
+  const matrixEntry = matrix.find((item) => item.chapterId === (chapter.id || body.chapterId)) || {};
+  const selectedRuleIds = new Set(Array.isArray(body.selectedRuleIds) ? body.selectedRuleIds.map(String) : []);
+  const allMatched = Array.isArray(matrixEntry.matchedRules) ? matrixEntry.matchedRules : [];
+  const allMissing = Array.isArray(matrixEntry.missingExpectedRules) ? matrixEntry.missingExpectedRules : [];
+  const matchedRules = selectedRuleIds.size
+    ? allMatched.filter((rule) => selectedRuleIds.has(rule.ruleId))
+    : allMatched.slice(0, 6);
+  const missingRules = body.includeMissingRules === false
+    ? []
+    : (selectedRuleIds.size
+      ? allMissing.filter((rule) => selectedRuleIds.has(rule.ruleId))
+      : allMissing.slice(0, 4));
+  const evidence = matchedRules
+    .map((rule) => ({ section: rule.ruleId, quote: rule.evidence }))
+    .filter((item) => item.quote && item.quote !== '-');
+  const references = matchedRules.flatMap((rule) => Array.isArray(rule.references) ? rule.references : []);
+
+  return {
+    taskType: body.taskType || 'check_chapter',
+    chapter: {
+      ...chapter,
+      id: chapter.id || matrixEntry.chapterId,
+      number: chapter.number || matrixEntry.chapterNumber,
+      title: chapter.title || matrixEntry.chapterTitle,
+      detectedMeaning: matrixEntry.detectedMeaning,
+      textExcerpt: chapter.textExcerpt || matrixEntry.textExcerpt,
+      wordCount: chapter.wordCount || matrixEntry.wordCount
+    },
+    matchedRules,
+    missingRules,
+    evidence,
+    references,
+    userInstruction: String(body.userInstruction || '').trim(),
+    options: {
+      detectedMeaning: matrixEntry.detectedMeaning
+    }
+  };
+}
+
+function auditDuration(startedAt) {
+  return Math.max(0, Date.now() - startedAt);
+}
+
+function auditEvidenceFromText(ruleId, evidenceText = '') {
+  const value = String(evidenceText || '').trim();
+  if (!value || value === '-') return null;
+  const [section, ...rest] = value.split(':');
+  const quote = rest.length ? rest.join(':').trim() : value;
+  return {
+    ruleId,
+    section: rest.length ? section.trim() : 'Pruefbericht',
+    quote,
+    evidenceQuality: quote.length > 80 ? 'medium' : 'weak',
+    reason: 'Fundstelle aus der regelbasierten Analyse.'
+  };
+}
+
+function buildAnalysisAuditReport({ doc, AntragDoc, sections, report }) {
+  const startedAt = Date.now();
+  const outline = extractDocumentOutline(doc);
+  const audit = createAnalysisAudit({
+    document: {
+      fileName: doc.fileName,
+      format: doc.format,
+      sizeBytes: doc.fileSizeBytes
+    },
+    outline
+  });
+
+  addAuditStep(audit, {
+    id: 'file_extraction',
+    label: 'Datei extrahiert',
+    status: doc.warnings?.length ? 'warning' : 'success',
+    durationMs: 0,
+    summary: `${doc.fileName} wurde als ${doc.format} ausgelesen.`,
+    details: {
+      pageCount: doc.pageCount,
+      docxStructureAvailable: doc.structure?.docxStructureAvailable,
+      warnings: doc.warnings || []
+    }
+  });
+
+  addAuditStep(audit, {
+    id: 'outline_extraction',
+    label: 'Kapitelstruktur erkannt',
+    status: outline.warnings?.length ? 'warning' : 'success',
+    durationMs: auditDuration(startedAt),
+    summary: `${flattenOutlineChapters(outline.chapters).length} Kapitel oder Unterkapitel erkannt.`,
+    details: { warnings: outline.warnings || [] }
+  });
+
+  const mappingStartedAt = Date.now();
+  const ruleMatrix = mapRulesToOutline({
+    outline,
+    ruleset: FIAE_RULESET_V2,
+    sections,
+    doc,
+    AntragDoc
+  });
+
+  addAuditStep(audit, {
+    id: 'ruleset_application',
+    label: 'Ruleset angewendet',
+    status: report.results?.length ? 'success' : 'warning',
+    durationMs: auditDuration(mappingStartedAt),
+    summary: `${report.results?.length || 0} Prüfergebnisse erzeugt.`,
+    details: {
+      ruleset: 'fiae_ruleset_v2',
+      profile: report.options?.ihkProfile,
+      summary: report.metadata?.rulesets?.fiae_ruleset_v2 || {}
+    }
+  });
+
+  let mappingCount = 0;
+  let evidenceCount = 0;
+  let referenceCount = 0;
+  for (const entry of ruleMatrix.matrix || []) {
+    for (const rule of (entry.matchedRules || []).slice(0, 12)) {
+      if (mappingCount >= 180) break;
+      addRuleMappingAudit(audit, {
+        chapterId: entry.chapterId,
+        chapterTitle: `${entry.chapterNumber || ''} ${entry.chapterTitle || ''}`.trim(),
+        detectedMeaning: entry.detectedMeaning,
+        ruleId: rule.ruleId,
+        ruleTitle: rule.simpleTitle || rule.title,
+        mappingReason: `Kapitel wurde als "${entry.detectedMeaning}" erkannt; Regel passt über Phase, Schlüsselbegriffe oder Fundstelle.`,
+        confidence: entry.confidence,
+        status: rule.status
+      });
+      mappingCount += 1;
+
+      const evidence = auditEvidenceFromText(rule.ruleId, rule.evidence);
+      if (evidence) {
+        addEvidenceAudit(audit, evidence);
+        evidenceCount += 1;
+      }
+
+      for (const reference of (rule.references || []).slice(0, 3)) {
+        addReferenceAudit(audit, {
+          ruleId: rule.ruleId,
+          referenceId: reference.id,
+          title: reference.title,
+          topics: reference.topics || [],
+          reason: 'Referenzmetadaten wurden über Regel-/Themenzuordnung ausgewählt.'
+        });
+        referenceCount += 1;
+      }
+    }
+  }
+
+  addAuditStep(audit, {
+    id: 'rule_mapping',
+    label: 'Regeln zugeordnet',
+    status: mappingCount ? 'success' : 'warning',
+    durationMs: auditDuration(mappingStartedAt),
+    summary: `${mappingCount} Kapitel-/Regel-Zuordnungen erzeugt.`,
+    details: ruleMatrix.summary || {}
+  });
+
+  addAuditStep(audit, {
+    id: 'evidence_search',
+    label: 'Fundstellen gesucht',
+    status: evidenceCount ? 'success' : 'warning',
+    durationMs: 0,
+    summary: `${evidenceCount} kurze Fundstellen im Audit gespeichert.`,
+    details: { storedQuotesAreShortened: true }
+  });
+
+  addAuditStep(audit, {
+    id: 'reference_mapping',
+    label: 'Referenzen zugeordnet',
+    status: referenceCount ? 'success' : 'skipped',
+    durationMs: 0,
+    summary: referenceCount ? `${referenceCount} Referenzmetadaten zugeordnet.` : 'Keine Referenzmetadaten zugeordnet.',
+    details: { fullBookTextsStored: false }
+  });
+
+  const promptEntry = (ruleMatrix.matrix || []).find((entry) => (
+    (entry.matchedRules || []).some((rule) => ['rot', 'gelb', 'grau'].includes(rule.status))
+  )) || ruleMatrix.matrix?.[0];
+  if (promptEntry) {
+    const promptMeta = buildUserPrompt({
+      taskType: 'check_chapter',
+      chapter: {
+        id: promptEntry.chapterId,
+        number: promptEntry.chapterNumber,
+        title: promptEntry.chapterTitle,
+        detectedMeaning: promptEntry.detectedMeaning,
+        textExcerpt: promptEntry.textExcerpt,
+        wordCount: promptEntry.wordCount
+      },
+      matchedRules: (promptEntry.matchedRules || []).slice(0, 5),
+      missingRules: (promptEntry.missingExpectedRules || []).slice(0, 3),
+      evidence: (promptEntry.matchedRules || [])
+        .slice(0, 4)
+        .map((rule) => ({ section: rule.ruleId, quote: rule.evidence })),
+      references: (promptEntry.matchedRules || []).flatMap((rule) => rule.references || []).slice(0, 5)
+    });
+    addPromptAudit(audit, { ...promptMeta, taskType: 'check_chapter' });
+  }
+
+  addAuditStep(audit, {
+    id: 'prompt_context',
+    label: 'Prompt-Kontexte gebaut',
+    status: audit.prompts.length ? 'success' : 'skipped',
+    durationMs: 0,
+    summary: audit.prompts.length ? `${audit.prompts.length} Prompt-Kontext erzeugt.` : 'Kein Prompt-Kontext erzeugt.',
+    details: { promptContainsSecrets: false, fullDocumentStored: false }
+  });
+
+  if (report.aiConsensus?.items?.length) {
+    for (const item of report.aiConsensus.items) {
+      for (const reviewer of ['primary', 'counter', 'revision', 'arbiter']) {
+        const status = item[`${reviewer}Status`];
+        if (!status) continue;
+        addAiReviewAudit(audit, {
+          ruleId: item.ruleId,
+          reviewer,
+          status,
+          confidence: reviewer === 'arbiter' ? 0.85 : 0.7,
+          reason: item.finalReason,
+          manualReviewRequired: item.manualReviewRequired
+        });
+      }
+      for (const conflict of item.conflictHistory || []) {
+        addConflictAudit(audit, conflict);
+      }
+    }
+  } else if (report.ai?.used) {
+    addAiReviewAudit(audit, {
+      ruleId: 'simple_ai_review',
+      reviewer: 'primary',
+      status: report.ai.overallStatus || 'grau',
+      confidence: 0.65,
+      reason: report.ai.overallNote || 'Einfache KI-Zusatzprüfung wurde ausgeführt.',
+      manualReviewRequired: false
+    });
+  }
+
+  addAuditStep(audit, {
+    id: 'ai_review',
+    label: 'KI-Prüfung ausgeführt',
+    status: report.ai?.used || report.aiConsensus?.actualAiUsed ? 'success' : 'skipped',
+    durationMs: 0,
+    summary: report.ai?.used || report.aiConsensus?.actualAiUsed
+      ? 'KI-Ergebnisse wurden in den Audit übernommen.'
+      : 'Keine KI-Prüfung ausgeführt oder kein effektiver API-Key verfügbar.',
+    details: {
+      simpleAiUsed: Boolean(report.ai?.used),
+      multiAiUsed: Boolean(report.aiConsensus?.actualAiUsed),
+      conflicts: audit.conflicts.length
+    }
+  });
+
+  addAuditStep(audit, {
+    id: 'excel_ready',
+    label: 'Excel vorbereitet',
+    status: 'success',
+    durationMs: 0,
+    summary: 'Bericht kann inklusive Audit-Blättern exportiert werden.',
+    details: { auditSheets: true }
+  });
+
+  return finalizeAudit(audit, report);
 }
 
 function buildInstructions(mode) {
@@ -1962,6 +2262,126 @@ function formatResultReferences(references = []) {
     .join('; ');
 }
 
+function addAuditSheets(workbook, report) {
+  const audit = report.auditReport;
+  if (!audit) return;
+
+  const overview = workbook.addWorksheet('Audit Übersicht');
+  overview.columns = [
+    { header: 'Kennzahl', key: 'key', width: 34 },
+    { header: 'Wert', key: 'value', width: 90 }
+  ];
+  overview.addRows([
+    { key: 'Audit-ID', value: audit.id },
+    { key: 'Erstellt am', value: audit.createdAt },
+    { key: 'Dokument', value: audit.document?.fileName || report.metadata?.fileName || '' },
+    { key: 'Format', value: audit.document?.format || report.metadata?.format || '' },
+    { key: 'Gesamtscore', value: audit.summary?.score ?? report.summary?.score ?? 0 },
+    { key: 'Rote Punkte', value: audit.summary?.redCount || 0 },
+    { key: 'Gelbe Punkte', value: audit.summary?.yellowCount || 0 },
+    { key: 'Graue Punkte', value: audit.summary?.grayCount || 0 },
+    { key: 'Erkannte Kapitel', value: audit.outline?.chapterCount || 0 },
+    { key: 'Zugeordnete Regeln', value: audit.summary?.mappedRuleCount || 0 },
+    { key: 'Nicht zugeordnete Regeln', value: audit.summary?.unmappedRuleCount || 0 },
+    { key: 'Manuelle Prüfung', value: audit.summary?.manualReviewCount || 0 },
+    { key: 'KI genutzt', value: audit.summary?.aiUsed ? 'ja' : 'nein' },
+    { key: 'Warnungen', value: (audit.summary?.warnings || []).join(' | ') }
+  ]);
+  styleWorksheetHeader(overview);
+
+  const steps = workbook.addWorksheet('Analyse Schritte');
+  steps.columns = [
+    { header: 'Schritt', key: 'label', width: 34 },
+    { header: 'Status', key: 'status', width: 14 },
+    { header: 'Dauer', key: 'durationMs', width: 12 },
+    { header: 'Zusammenfassung', key: 'summary', width: 70 },
+    { header: 'Details', key: 'details', width: 90 }
+  ];
+  (audit.steps || []).forEach((step) => steps.addRow({
+    ...step,
+    details: safeCell(step.details)
+  }));
+  styleWorksheetHeader(steps);
+
+  const matrix = workbook.addWorksheet('Kapitel Regel Matrix');
+  matrix.columns = [
+    { header: 'Kapitelnummer', key: 'chapterId', width: 18 },
+    { header: 'Kapitel', key: 'chapterTitle', width: 42 },
+    { header: 'Erkannte Bedeutung', key: 'detectedMeaning', width: 32 },
+    { header: 'Regel-ID', key: 'ruleId', width: 16 },
+    { header: 'Regel', key: 'ruleTitle', width: 46 },
+    { header: 'Confidence', key: 'confidence', width: 12 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Fundstelle', key: 'evidence', width: 70 },
+    { header: 'Empfehlung', key: 'recommendation', width: 70 }
+  ];
+  (audit.ruleMappings || []).forEach((mapping) => {
+    const evidence = (audit.evidence || []).find((item) => item.ruleId === mapping.ruleId);
+    matrix.addRow({
+      ...mapping,
+      evidence: evidence ? `${evidence.section}: ${evidence.quote}` : '',
+      recommendation: mapping.status === 'rot'
+        ? 'Fehlenden Inhalt ergänzen.'
+        : mapping.status === 'gelb'
+          ? 'Inhalt präzisieren und besser belegen.'
+          : mapping.status === 'grau'
+            ? 'Manuell prüfen.'
+            : 'Kein akuter Handlungsbedarf.'
+    });
+  });
+  styleWorksheetHeader(matrix);
+
+  const prompts = workbook.addWorksheet('Prompt Kontexte');
+  prompts.columns = [
+    { header: 'Prompt-Titel', key: 'title', width: 36 },
+    { header: 'TaskType', key: 'taskType', width: 22 },
+    { header: 'Kapitel', key: 'includedChapterIds', width: 36 },
+    { header: 'Regeln', key: 'includedRuleIds', width: 48 },
+    { header: 'Kontextgröße', key: 'estimatedContextSize', width: 16 },
+    { header: 'Warnungen', key: 'warnings', width: 70 }
+  ];
+  (audit.prompts || []).forEach((promptMeta) => prompts.addRow({
+    ...promptMeta,
+    includedChapterIds: (promptMeta.includedChapterIds || []).join(', '),
+    includedRuleIds: (promptMeta.includedRuleIds || []).join(', '),
+    warnings: (promptMeta.warnings || []).join(' | ')
+  }));
+  styleWorksheetHeader(prompts);
+
+  const reviews = workbook.addWorksheet('KI Review Audit');
+  reviews.columns = [
+    { header: 'Regel-ID', key: 'ruleId', width: 18 },
+    { header: 'Reviewer', key: 'reviewer', width: 14 },
+    { header: 'Runde', key: 'round', width: 10 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Confidence', key: 'confidence', width: 12 },
+    { header: 'Begründung', key: 'reason', width: 80 },
+    { header: 'Manuelle Prüfung', key: 'manualReviewRequired', width: 18 }
+  ];
+  (audit.aiReviews || []).forEach((review) => reviews.addRow(review));
+  styleWorksheetHeader(reviews);
+
+  const testReport = audit.testReport || report.testReport;
+  const tests = Array.isArray(testReport?.tests)
+    ? testReport.tests
+    : (testReport?.groups || []).flatMap((group) => group.tests || []);
+  if (tests.length) {
+    const testSheet = workbook.addWorksheet('Funktionstests');
+    testSheet.columns = [
+      { header: 'Test-ID', key: 'id', width: 14 },
+      { header: 'Kategorie', key: 'category', width: 24 },
+      { header: 'Testname', key: 'name', width: 42 },
+      { header: 'Status', key: 'status', width: 14 },
+      { header: 'Dauer', key: 'durationMs', width: 12 },
+      { header: 'Erwartung', key: 'expected', width: 70 },
+      { header: 'Ergebnis', key: 'actual', width: 70 },
+      { header: 'Empfehlung', key: 'recommendation', width: 70 }
+    ];
+    tests.forEach((test) => testSheet.addRow(test));
+    styleWorksheetHeader(testSheet);
+  }
+}
+
 async function createExcel(report) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'IHK DokuTool';
@@ -2026,6 +2446,7 @@ async function createExcel(report) {
   });
 
   addAiConsensusSheets(workbook, report);
+  addAuditSheets(workbook, report);
 
   const raw = workbook.addWorksheet('Rohdaten');
   raw.columns = [
@@ -2065,6 +2486,97 @@ app.get('/api/references/topics', requireAuth, (_req, res) => {
 
 app.post('/api/references/scan', requireAuth, (_req, res) => {
   res.json(scanLocalReferences());
+});
+
+app.post('/api/prompt-assistant/analyze-outline', requireAuth, upload.fields([
+  { name: 'documentation', maxCount: 1 },
+  { name: 'application', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const docFile = req.files?.documentation?.[0];
+    const applicationFile = req.files?.application?.[0];
+    if (!docFile) return res.status(400).json({ error: 'Bitte eine Projektdokumentation hochladen.' });
+
+    const doc = await extractFile(docFile);
+    const AntragDoc = applicationFile ? await extractFile(applicationFile) : null;
+    const outline = extractDocumentOutline(doc);
+    const sections = extractDocumentSections(doc);
+    const ruleMatrix = mapRulesToOutline({
+      outline,
+      ruleset: FIAE_RULESET_V2,
+      sections,
+      doc,
+      AntragDoc
+    });
+
+    res.json({
+      outline,
+      matrix: ruleMatrix.matrix,
+      summary: ruleMatrix.summary,
+      templates: PROMPT_TEMPLATES,
+      aiConfig: getAiProviderInfo(req.user)
+    });
+  } catch (error) {
+    console.error('Prompt-Assistent Outline-Analyse fehlgeschlagen:', safeErrorMessage(error));
+    res.status(500).json({ error: safeErrorMessage(error, 'Kapitelstruktur konnte nicht analysiert werden.') });
+  }
+});
+
+app.post('/api/prompt-assistant/build-prompt', requireAuth, (req, res) => {
+  try {
+    const promptInput = buildPromptAssistantInput(req.body || {});
+    const promptMeta = buildUserPrompt(promptInput);
+    res.json({
+      prompt: promptMeta,
+      aiConfig: getAiProviderInfo(req.user)
+    });
+  } catch (error) {
+    res.status(400).json({ error: safeErrorMessage(error, 'Prompt konnte nicht erzeugt werden.') });
+  }
+});
+
+app.post('/api/prompt-assistant/run-prompt', requireAuth, async (req, res) => {
+  try {
+    const promptInput = buildPromptAssistantInput(req.body || {});
+    const promptMeta = buildUserPrompt(promptInput);
+    const aiConfig = getEffectiveAiConfig(req.user);
+
+    if (!aiConfig.apiKey) {
+      return res.json({
+        executed: false,
+        answer: '',
+        message: 'Keine KI ausgefuehrt, weil kein API-Key verfuegbar ist. Der Prompt kann trotzdem kopiert werden.',
+        prompt: promptMeta,
+        aiConfig: getAiProviderInfo(req.user)
+      });
+    }
+
+    const client = createClient(req.user);
+    const response = await client.responses.create({
+      model: aiConfig.model,
+      instructions: 'Du bist ein regelgebundenes IHK-Dokumentations-Review-Werkzeug. Antworte auf Deutsch, kompakt, kritisch und mit konkreten To-dos.',
+      input: promptMeta.prompt,
+      max_output_tokens: Math.min(maxOutputTokens, 1600)
+    });
+
+    res.json({
+      executed: true,
+      answer: response.output_text || 'Es wurde keine Antwort erzeugt.',
+      prompt: promptMeta,
+      promptMeta: {
+        title: promptMeta.title,
+        includedRuleIds: promptMeta.includedRuleIds,
+        includedChapterIds: promptMeta.includedChapterIds,
+        estimatedContextSize: promptMeta.estimatedContextSize,
+        warnings: promptMeta.warnings,
+        model: aiConfig.model,
+        keySource: aiConfig.effectiveKeySource
+      }
+    });
+  } catch (error) {
+    console.error('Prompt-Assistent KI-Ausfuehrung fehlgeschlagen:', safeErrorMessage(error));
+    res.status(500).json({ error: safeErrorMessage(error, 'Prompt konnte nicht ausgefuehrt werden.') });
+  }
 });
 
 app.get('/api/ai-config', requireAuth, (req, res) => {
@@ -2300,6 +2812,68 @@ app.get('/api/reports/:id', requireAuth, async (req, res) => {
   res.json({ report: entry.report, meta: entry });
 });
 
+app.get('/api/reports/:id/audit', requireAuth, async (req, res) => {
+  const entry = await dataStore.getReport(req.user.id, req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Bericht nicht gefunden.' });
+  if (!entry.report?.auditReport) return res.status(404).json({ error: 'Zu diesem Bericht liegt kein Audit-Report vor.' });
+  res.json({
+    auditReport: entry.report.auditReport,
+    visualReport: buildVisualReportModel(entry.report)
+  });
+});
+
+app.post('/api/audit/self-test', requireAuth, async (req, res) => {
+  try {
+    const testRun = await runFunctionalTests({ includeAi: false, includeFileTests: true });
+    const testReport = buildFunctionalTestReport(testRun);
+    res.json(testReport);
+  } catch (error) {
+    res.status(500).json({ error: safeErrorMessage(error, 'Interner Test konnte nicht ausgeführt werden.') });
+  }
+});
+
+app.post('/api/audit/function-tests', requireAuth, async (req, res) => {
+  try {
+    const includeAiRequested = Boolean(req.body?.includeAi);
+    const includeAi = includeAiRequested && hasEffectiveAiKey(req.user);
+    const testRun = await runFunctionalTests({
+      includeAi,
+      includeFileTests: true,
+      aiAvailable: includeAi,
+      aiProviderInfo: getAiProviderInfo(req.user)
+    });
+    const testReport = buildFunctionalTestReport(testRun);
+    if (includeAiRequested && !includeAi) {
+      testReport.tests.push({
+        id: 'FT-AI-USER',
+        name: 'KI-Verbindung mit testen',
+        category: 'KI-Konfiguration',
+        status: 'skipped',
+        durationMs: 0,
+        expected: 'Ein effektiver API-Key ist vorhanden.',
+        actual: 'Kein effektiver API-Key für diesen Benutzer vorhanden; KI-Verbindungstest wurde übersprungen.',
+        details: getAiProviderInfo(req.user),
+        recommendation: 'Eigenen API-Key im Profil speichern oder lokalen Standard-Key konfigurieren.'
+      });
+      testReport.summary.total += 1;
+      testReport.summary.skipped += 1;
+      testReport.summaryCards = [
+        { label: 'Tests gesamt', value: testReport.summary.total },
+        { label: 'Bestanden', value: testReport.summary.passed },
+        { label: 'Warnungen', value: testReport.summary.warnings },
+        { label: 'Fehler', value: testReport.summary.failed },
+        { label: 'Übersprungen', value: testReport.summary.skipped }
+      ];
+      const group = testReport.groups.find((item) => item.category === 'KI-Konfiguration');
+      if (group) group.tests.push(testReport.tests.at(-1));
+      else testReport.groups.push({ category: 'KI-Konfiguration', tests: [testReport.tests.at(-1)] });
+    }
+    res.json(testReport);
+  } catch (error) {
+    res.status(500).json({ error: safeErrorMessage(error, 'Funktionstests konnten nicht ausgeführt werden.') });
+  }
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   try {
     const { message, mode = 'allgemein', history = [], context = '' } = req.body || {};
@@ -2377,15 +2951,27 @@ app.post('/api/analyze', requireAuth, upload.fields([
 
     if (options.aiReviewMode === 'multi') {
       report.ai = { used: false, reason: 'Einfache KI-Zusatzpruefung zugunsten Multi-KI-Konsenspruefung uebersprungen.' };
+      const aiConfig = getEffectiveAiConfig(req.user);
+      let multiAiClient = null;
+      if (aiConfig.apiKey) {
+        try {
+          multiAiClient = createClient(req.user);
+        } catch {
+          multiAiClient = null;
+        }
+      }
       report.aiConsensus = await runAiConsensusReview({
         doc,
         AntragDoc,
         sections,
         baseReport: report,
-        maxRounds: 3,
-        apiKeyAvailable: hasOpenAiApiKey(req.user)
+        maxRounds: Number(process.env.MULTI_AI_MAX_ROUNDS || 3),
+        maxItems: Number(process.env.MULTI_AI_MAX_RULES || 12),
+        apiKeyAvailable: Boolean(aiConfig.apiKey),
+        client: multiAiClient,
+        model: aiConfig.model
       });
-      if (!hasOpenAiApiKey(req.user)) {
+      if (!aiConfig.apiKey) {
         addResult(
           report.results,
           'KI-Konsens',
@@ -2400,6 +2986,27 @@ app.post('/api/analyze', requireAuth, upload.fields([
       }
     } else if (!report.aiConsensus) {
       report.aiConsensus = { enabled: false, maxRounds: 3, completedRounds: 0, consensusReached: false, openConflictCount: 0, manualReviewCount: 0, reviewedRuleCount: 0, items: [] };
+    }
+
+    try {
+      report.auditReport = buildAnalysisAuditReport({ doc, AntragDoc, sections, report });
+    } catch (auditError) {
+      const audit = createAnalysisAudit({
+        document: {
+          fileName: doc.fileName,
+          format: doc.format,
+          sizeBytes: doc.fileSizeBytes
+        }
+      });
+      addAuditStep(audit, {
+        id: 'audit_generation',
+        label: 'Audit-Report erzeugt',
+        status: 'error',
+        durationMs: 0,
+        summary: safeErrorMessage(auditError, 'Audit-Report konnte nicht vollständig erzeugt werden.'),
+        details: {}
+      });
+      report.auditReport = finalizeAudit(audit, report);
     }
 
     const savedReport = await dataStore.createReport(req.user.id, {

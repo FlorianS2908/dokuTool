@@ -1,21 +1,47 @@
-import { FIAE_RULESET_V2 } from '../../../ruleset-evaluator.js';
-import { extractEvidenceForRule } from '../analysis/evidence-extractor.js';
 import { runPrimaryReviewer } from './primary-reviewer.js';
 import { runCounterReviewer } from './counter-reviewer.js';
 import { runRevisionReviewer } from './revision-reviewer.js';
 import { runArbiterReviewer } from './arbiter-reviewer.js';
 import { detectReviewConflicts, severeConflicts } from './conflict-detector.js';
 import { buildConsensusItem, buildConsensusReport } from './consensus-builder.js';
+import { buildRuleReviewBatch } from './ruleset-context-builder.js';
+import { createReviewItem } from './review-schema.js';
 
-function candidateResults(baseReport, maxItems = 18) {
-  return (baseReport.results || [])
-    .filter((item) => item.ruleset?.source === FIAE_RULESET_V2.id || /^FIAE Ruleset v2/.test(item.category || ''))
-    .filter((item) => item.status === 'rot' || item.status === 'gelb' || item.severity === 'hoch')
-    .slice(0, maxItems);
+function baseResultFromContext(baseReport, context) {
+  return (baseReport?.results || []).find((result) => result.ruleset?.id === context.rule?.id) || {
+    ruleset: { id: context.rule?.id },
+    status: context.baseResult?.status || 'grau',
+    assessment: context.baseResult?.assessment || '',
+    evidence: context.baseResult?.evidence || '',
+    reason: context.baseResult?.reason || '',
+    recommendation: context.baseResult?.recommendation || ''
+  };
 }
 
-function findRule(ruleId) {
-  return (FIAE_RULESET_V2.rules || []).find((rule) => rule.id === ruleId);
+function errorReview(context, error, round = 1) {
+  return createReviewItem({
+    reviewer: 'primary',
+    round,
+    ruleId: context.rule?.id,
+    status: 'grau',
+    confidence: 0.1,
+    finding: 'Multi-KI-Review fuer diese Regel fehlgeschlagen',
+    evidence: [],
+    reason: error?.message || 'Unbekannter Fehler im Regelreview.',
+    recommendation: 'Regel manuell anhand der Fundstellen und des Rulesets pruefen.',
+    manualReviewRequired: true
+  });
+}
+
+function usedRuleContext(context) {
+  return {
+    ruleId: context.rule?.id,
+    ruleTitle: context.rule?.title,
+    statusRulesIncluded: Boolean(context.rule?.statusRules),
+    evidenceCount: context.documentEvidence?.length || 0,
+    referenceHintCount: context.referenceHints?.length || 0,
+    applicationExcerptIncluded: Boolean(context.applicationExcerpt)
+  };
 }
 
 export async function runAiConsensusReview({
@@ -23,19 +49,24 @@ export async function runAiConsensusReview({
   AntragDoc,
   sections,
   baseReport,
-  maxRounds = 3,
-  apiKeyAvailable = false
+  maxRounds = Number(process.env.MULTI_AI_MAX_ROUNDS || 3),
+  maxItems = Number(process.env.MULTI_AI_MAX_RULES || 12),
+  apiKeyAvailable = false,
+  client = null,
+  model = process.env.OPENAI_MODEL || 'gpt-5.5'
 }) {
-  const candidates = candidateResults(baseReport);
+  const contexts = buildRuleReviewBatch({ baseReport, sections, doc, AntragDoc, maxItems });
 
-  if (!apiKeyAvailable) {
+  if (!apiKeyAvailable || !client) {
     return {
       enabled: false,
+      actualAiUsed: false,
+      model,
       maxRounds,
       completedRounds: 0,
       consensusReached: false,
       openConflictCount: 0,
-      manualReviewCount: candidates.length,
+      manualReviewCount: contexts.length,
       reviewedRuleCount: 0,
       reason: 'Kein effektiver API-Key verfuegbar. Multi-KI-Konsenspruefung wurde nicht ausgefuehrt.',
       items: []
@@ -44,42 +75,94 @@ export async function runAiConsensusReview({
 
   const items = [];
   let completedRounds = 0;
+  let actualAiUsed = false;
 
-  for (const baseResult of candidates) {
-    const ruleId = baseResult.ruleset?.id;
-    const rule = findRule(ruleId);
-    const evidence = rule ? extractEvidenceForRule({ rule, sections, doc, AntragDoc }) : [];
+  for (const context of contexts) {
+    const baseResult = baseResultFromContext(baseReport, context);
     const reviews = [];
     const conflictHistory = [];
+    let latestConflicts = [];
 
-    const primary = await runPrimaryReviewer({ baseResult, evidence, round: 1 });
-    reviews.push(primary);
-    const counter = await runCounterReviewer({ primaryReview: primary, baseResult, evidence, round: 1 });
-    reviews.push(counter);
-    completedRounds = Math.max(completedRounds, 1);
+    try {
+      const primary = await runPrimaryReviewer({ client, model, context, round: 1 });
+      actualAiUsed = true;
+      reviews.push(primary);
 
-    let conflicts = detectReviewConflicts(primary, counter, rule);
-    conflictHistory.push(...conflicts);
+      const counter = await runCounterReviewer({ client, model, context, primaryReview: primary, round: 1 });
+      reviews.push(counter);
+      completedRounds = Math.max(completedRounds, 1);
 
-    for (let round = 2; round <= maxRounds && severeConflicts(conflicts).length; round += 1) {
-      const revision = await runRevisionReviewer({ primaryReview: primary, conflicts, round });
-      reviews.push(revision);
-      const counterAgain = await runCounterReviewer({ primaryReview: revision, baseResult, evidence, round });
-      reviews.push(counterAgain);
-      completedRounds = Math.max(completedRounds, round);
-      conflicts = detectReviewConflicts(revision, counterAgain, rule);
-      conflictHistory.push(...conflicts);
+      latestConflicts = detectReviewConflicts(primary, counter, context.rule);
+      conflictHistory.push(...latestConflicts);
+
+      let revisionBase = primary;
+      let counterBase = counter;
+      for (let round = 2; round <= maxRounds && severeConflicts(latestConflicts).length; round += 1) {
+        const revision = await runRevisionReviewer({
+          client,
+          model,
+          context,
+          primaryReview: revisionBase,
+          counterReview: counterBase,
+          conflicts: latestConflicts,
+          round
+        });
+        reviews.push(revision);
+
+        const counterAgain = await runCounterReviewer({
+          client,
+          model,
+          context,
+          primaryReview: revision,
+          round
+        });
+        reviews.push(counterAgain);
+        completedRounds = Math.max(completedRounds, round);
+
+        latestConflicts = detectReviewConflicts(revision, counterAgain, context.rule);
+        conflictHistory.push(...latestConflicts);
+        revisionBase = revision;
+        counterBase = counterAgain;
+      }
+
+      if (severeConflicts(latestConflicts).length) {
+        const arbiter = await runArbiterReviewer({
+          client,
+          model,
+          context,
+          ruleId: context.rule?.id,
+          reviews,
+          conflicts: latestConflicts,
+          round: maxRounds
+        });
+        reviews.push(arbiter);
+      }
+    } catch (error) {
+      reviews.push(errorReview(context, error));
+      conflictHistory.push({
+        ruleId: context.rule?.id,
+        round: 1,
+        type: 'review_error',
+        level: 'hoch',
+        description: error?.message || 'Review-Fehler',
+        requiresAnotherRound: false
+      });
     }
 
-    if (severeConflicts(conflicts).length) {
-      reviews.push(await runArbiterReviewer({ ruleId, reviews, conflicts, round: maxRounds }));
-    }
-
-    items.push(buildConsensusItem({ ruleId, baseResult, reviews, conflicts: conflictHistory }));
+    items.push(buildConsensusItem({
+      ruleId: context.rule?.id,
+      rule: context.rule,
+      baseResult,
+      reviews,
+      conflicts: conflictHistory,
+      usedRuleContext: usedRuleContext(context)
+    }));
   }
 
   return buildConsensusReport({
     enabled: true,
+    actualAiUsed,
+    model,
     maxRounds,
     completedRounds,
     items

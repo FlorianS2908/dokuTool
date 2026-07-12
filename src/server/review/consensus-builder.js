@@ -12,7 +12,7 @@ function finalStatusFromReviews(reviews = []) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
 }
 
-export function buildConsensusItem({ ruleId, baseResult, reviews = [], conflicts = [] }) {
+export function buildConsensusItem({ ruleId, rule = null, baseResult, reviews = [], conflicts = [], usedRuleContext = null }) {
   const primary = reviews.find((item) => item.reviewer === 'primary');
   const counter = reviews.find((item) => item.reviewer === 'counter');
   const revision = reviews.findLast?.((item) => item.reviewer === 'revision') || reviews.filter((item) => item.reviewer === 'revision').at(-1);
@@ -22,6 +22,8 @@ export function buildConsensusItem({ ruleId, baseResult, reviews = [], conflicts
 
   return {
     ruleId,
+    ruleTitle: rule?.title || baseResult?.criterion || '',
+    category: rule?.category || baseResult?.ruleset?.category || baseResult?.category || '',
     baseStatus: baseResult?.status || 'grau',
     primaryStatus: primary?.status || '',
     counterStatus: counter?.status || '',
@@ -33,15 +35,18 @@ export function buildConsensusItem({ ruleId, baseResult, reviews = [], conflicts
     manualReviewRequired: reviews.some((item) => item.manualReviewRequired) || finalStatus === 'grau',
     conflictHistory: conflicts,
     finalReason: arbiter?.reason || revision?.reason || primary?.reason || baseResult?.reason || '',
-    finalRecommendation: arbiter?.recommendation || revision?.recommendation || primary?.recommendation || baseResult?.recommendation || ''
+    finalRecommendation: arbiter?.recommendation || revision?.recommendation || primary?.recommendation || baseResult?.recommendation || '',
+    usedRuleContext: usedRuleContext || null
   };
 }
 
-export function buildConsensusReport({ enabled, maxRounds, completedRounds, items }) {
+export function buildConsensusReport({ enabled, actualAiUsed = false, model = '', maxRounds, completedRounds, items }) {
   const safeItems = Array.isArray(items) ? items : [];
   const openConflictCount = safeItems.reduce((acc, item) => acc + (item.conflictHistory || []).filter((conflict) => conflict.requiresAnotherRound).length, 0);
   return {
     enabled: Boolean(enabled),
+    actualAiUsed: Boolean(actualAiUsed),
+    model,
     maxRounds,
     completedRounds,
     consensusReached: openConflictCount === 0,
