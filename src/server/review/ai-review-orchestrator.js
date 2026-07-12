@@ -37,7 +37,7 @@ export async function runAiConsensusReview({
       openConflictCount: 0,
       manualReviewCount: candidates.length,
       reviewedRuleCount: 0,
-      reason: 'OPENAI_API_KEY fehlt oder ist Platzhalter. Multi-KI-Konsenspruefung wurde nicht ausgefuehrt.',
+      reason: 'Kein effektiver API-Key verfuegbar. Multi-KI-Konsenspruefung wurde nicht ausgefuehrt.',
       items: []
     };
   }

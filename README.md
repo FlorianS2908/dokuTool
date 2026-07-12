@@ -80,6 +80,45 @@ Aktuell verwendet das Tool nur sichere Metadaten, Themen und Regelzuordnungen. E
 
 Rechtlicher Hinweis: Nur Buecher verwenden, fuer die du Nutzungsrechte besitzt. Keine Buchdateien und keine langen Auszuege veroeffentlichen.
 
+## KI-Konfiguration
+
+Das Tool unterstuetzt eine sichere Key-Reihenfolge:
+
+1. Benutzer-Key aus dem Profil, wenn vorhanden und aktiv
+2. `DEFAULT_OPENAI_API_KEY_FILE`, wenn gesetzt und lesbar
+3. `API_KEY_DOKU_TOOL`, wenn gesetzt
+4. `OPENAI_API_KEY`, wenn gesetzt
+5. Keine KI verfuegbar
+
+Standard-Key lokal per `.env` konfigurieren:
+
+```env
+PORT=8080
+OPENAI_MODEL=gpt-5.5
+AI_KEY_ENCRYPTION_SECRET=ein_langes_zufaelliges_secret
+
+# Variante A:
+OPENAI_API_KEY=dein_standard_key
+
+# Variante B:
+API_KEY_DOKU_TOOL=dein_standard_key
+
+# Variante C:
+DEFAULT_OPENAI_API_KEY_FILE=C:\Users\Florian.Schaffer\OneDrive - Amadeus Fire AG\Desktop\api_key_ContentFactory - Kopie.txt
+```
+
+Benutzer koennen im Profil/Setup einen eigenen OpenAI API-Key per Copy/Paste speichern. Dieser Key wird lokal verschluesselt gespeichert und nie vollstaendig an den Browser zurueckgegeben. Im Frontend wird nur eine Maske wie `sk-...abcd` angezeigt.
+
+Wenn ein User-Key aktiv ist, hat er Vorrang vor dem Standard-Key. Wird er geloescht, nutzt das Tool wieder den lokal konfigurierten Standard-Key, falls vorhanden.
+
+Sicherheit:
+
+- `.env` nicht committen.
+- `.data` nicht committen.
+- API-Keys niemals in GitHub speichern.
+- Fuer stabile Verschluesselung `AI_KEY_ENCRYPTION_SECRET` setzen.
+- Reports, JSON-Exports und Excel-Exports enthalten keine API-Keys.
+
 ## Installation unter Windows
 
 ### 1. Node.js installieren
@@ -106,14 +145,15 @@ Lege im Projektordner eine lokale Datei `.env` an. Diese Datei darf nicht nach G
 Minimaler Inhalt:
 
 ```env
-OPENAI_API_KEY=dein_api_key_hier
-OPENAI_MODEL=gpt-5.5
 PORT=8080
+OPENAI_MODEL=gpt-5.5
+AI_KEY_ENCRYPTION_SECRET=ein_langes_zufaelliges_secret
+OPENAI_API_KEY=dein_standard_key
 MAX_OUTPUT_TOKENS=1800
 UPLOAD_LIMIT_MB=30
 ```
 
-Der API-Key ist fuer KI-Zusatzpruefung und Chat noetig. Die regelbasierte Doku-Pruefung funktioniert auch ohne gueltigen Key.
+Ein Standard-Key ist fuer KI-Zusatzpruefung und Chat noetig, wenn kein Benutzer-Key hinterlegt wurde. Die regelbasierte Doku-Pruefung funktioniert auch ohne gueltigen Key.
 
 ## Auth, Profile und Firestore
 

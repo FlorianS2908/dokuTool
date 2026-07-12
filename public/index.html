@@ -151,6 +151,23 @@
 
       <p id="profileStatus" class="status-line"></p>
 
+      <section class="setup-block profile-ai-block">
+        <h3>KI-Konfiguration</h3>
+        <div id="aiConfigStatus" class="ai-config-status">KI-Status wird geladen ...</div>
+        <label>
+          OpenAI API-Key
+          <input id="aiApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
+        </label>
+        <div class="profile-actions">
+          <button id="saveAiKeyButton" type="button">Key speichern</button>
+          <button id="testAiKeyButton" class="secondary" type="button">Verbindung testen</button>
+        </div>
+        <button id="removeAiKeyButton" class="secondary" type="button">Eigenen Key entfernen</button>
+        <p class="status-line">Der Key wird lokal verschluesselt gespeichert und nicht nach GitHub uebertragen.</p>
+        <p class="status-line">Wenn kein eigener Key gespeichert ist, nutzt das Tool den lokal konfigurierten Standard-Key.</p>
+        <p id="aiConfigMessage" class="status-line"></p>
+      </section>
+
       <section class="setup-block profile-quiz-block">
         <h3>Quiz-Profil</h3>
         <label>

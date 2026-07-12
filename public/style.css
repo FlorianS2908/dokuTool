@@ -350,6 +350,30 @@ label {
   background: var(--panel-soft);
 }
 
+.profile-ai-block {
+  background: #ffffff;
+}
+
+.ai-config-status {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-soft);
+}
+
+.ai-config-status strong,
+.ai-config-status small {
+  display: block;
+}
+
+.ai-config-status small {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .setting-toggle {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

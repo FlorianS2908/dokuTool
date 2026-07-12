@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { publicAiConfig } from './src/server/ai/ai-key-store.js';
 
 const USERS_COLLECTION = 'users';
 const SESSIONS_COLLECTION = 'sessions';
@@ -23,9 +24,13 @@ function withoutPassword(user) {
     passwordHash,
     passwordSalt,
     passwordIterations,
+    aiConfig,
     ...publicUser
   } = user;
-  return publicUser;
+  return {
+    ...publicUser,
+    aiConfig: publicAiConfig(aiConfig)
+  };
 }
 
 function compactReportEntry(entry) {
@@ -122,6 +127,37 @@ class LocalJsonStore {
     data.users[index] = {
       ...data.users[index],
       ...patch,
+      updatedAt: now()
+    };
+    await this.write(data);
+    return data.users[index];
+  }
+
+  async updateUserAiConfig(userId, aiConfigPatch) {
+    const data = await this.read();
+    const index = data.users.findIndex((user) => user.id === userId);
+    if (index === -1) return null;
+
+    data.users[index] = {
+      ...data.users[index],
+      aiConfig: {
+        ...(data.users[index].aiConfig || {}),
+        ...aiConfigPatch
+      },
+      updatedAt: now()
+    };
+    await this.write(data);
+    return data.users[index];
+  }
+
+  async clearUserAiConfig(userId) {
+    const data = await this.read();
+    const index = data.users.findIndex((user) => user.id === userId);
+    if (index === -1) return null;
+
+    data.users[index] = {
+      ...data.users[index],
+      aiConfig: null,
       updatedAt: now()
     };
     await this.write(data);
@@ -259,6 +295,24 @@ class FirestoreStore {
   async updateUserProfile(userId, patch) {
     const ref = this.users().doc(userId);
     await ref.set({ ...patch, updatedAt: now() }, { merge: true });
+    return this.getUser(userId);
+  }
+
+  async updateUserAiConfig(userId, aiConfigPatch) {
+    const ref = this.users().doc(userId);
+    await ref.set({
+      aiConfig: aiConfigPatch,
+      updatedAt: now()
+    }, { merge: true });
+    return this.getUser(userId);
+  }
+
+  async clearUserAiConfig(userId) {
+    const ref = this.users().doc(userId);
+    await ref.set({
+      aiConfig: null,
+      updatedAt: now()
+    }, { merge: true });
     return this.getUser(userId);
   }
 

@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import OpenAI from 'openai';
 import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
 import JSZip from 'jszip';
@@ -18,6 +17,8 @@ import { runAiConsensusReview } from './src/server/review/ai-review-orchestrator
 import { searchReferenceMetadata, getReferenceTopics } from './src/server/references/reference-search.js';
 import { scanLocalReferences } from './src/server/references/reference-scanner.js';
 import { securityHeaders } from './src/server/security.js';
+import { createAiClientForUser, getAiProviderInfo, getEffectiveAiConfig, hasEffectiveAiKey } from './src/server/ai/ai-provider.js';
+import { clearUserApiKey, encryptApiKey, maskApiKey, setUserApiKey } from './src/server/ai/ai-key-store.js';
 import {
   loadQuizQuestionPools,
   loadQuizQuestions,
@@ -36,6 +37,9 @@ const uploadLimitMb = Number(process.env.UPLOAD_LIMIT_MB || 30);
 const profilePhotoLimitMb = Number(process.env.PROFILE_PHOTO_LIMIT_MB || 0.5);
 const dataStore = await createDataStore();
 const sessionSecret = process.env.AUTH_SESSION_SECRET || randomBytes(48).toString('hex');
+if (!process.env.AUTH_SESSION_SECRET) {
+  process.env.AUTH_SESSION_SECRET = sessionSecret;
+}
 const sessionCookieName = 'ihk_dokutool_session';
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
 
@@ -178,15 +182,34 @@ async function requireAuth(req, res, next) {
   }
 }
 
-function createClient() {
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dein_api_key_hier') {
-    throw new Error('OPENAI_API_KEY fehlt. Bitte .env anlegen und API-Key eintragen.');
-  }
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function createClient(user) {
+  return createAiClientForUser(user);
 }
 
-function hasOpenAiApiKey() {
-  return Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dein_api_key_hier');
+function hasOpenAiApiKey(user) {
+  return hasEffectiveAiKey(user);
+}
+
+function safeErrorMessage(error, fallback = 'Unbekannter Serverfehler.') {
+  const raw = String(error?.message || fallback);
+  return raw.replace(/sk-[A-Za-z0-9_-]+/g, 'sk-...');
+}
+
+function aiUnavailableMessage() {
+  return 'KI-Pruefung konnte nicht ausgefuehrt werden, da kein API-Key verfuegbar ist.';
+}
+
+function validateApiKeyInput(value) {
+  if (typeof value !== 'string') {
+    return { error: 'Bitte einen API-Key eingeben.' };
+  }
+  if (value !== value.trim()) {
+    return { error: 'Der API-Key darf keine Leerzeichen am Anfang oder Ende enthalten.' };
+  }
+  if (value.length < 20) {
+    return { error: 'Der API-Key ist zu kurz.' };
+  }
+  return { apiKey: value };
 }
 
 function buildInstructions(mode) {
@@ -1679,7 +1702,7 @@ function localAnalyze(doc, AntragDoc, options = {}, sections = extractDocumentSe
   return {
     generatedAt: new Date().toISOString(),
     tool: 'IHK DokuTool',
-    model: process.env.OPENAI_API_KEY ? model : null,
+    model: options.useAi ? model : null,
     options,
     summary: {
       score,
@@ -1721,8 +1744,9 @@ function selectUmlReviewImages(doc, maxImages = 4) {
   return [];
 }
 
-async function runAiReview({ doc, AntragDoc, baseReport, options }) {
-  const client = createClient();
+async function runAiReview({ doc, AntragDoc, baseReport, options, user }) {
+  const aiConfig = getEffectiveAiConfig(user);
+  const client = createClient(user);
   const umlReviewImages = selectUmlReviewImages(doc);
   const imageContextBlock = umlReviewImages.length
     ? `UML-nahe DOCX-Bilder fuer die Bildpruefung:\n${umlReviewImages.map((image, index) => `${index + 1}. ${image.fileName} | Kontext: ${image.nearbyText || '-'}`).join('\n')}`
@@ -1795,13 +1819,19 @@ ${imageContextBlock}`.trim();
   }
 
   const response = await client.responses.create({
-    model,
+    model: aiConfig.model,
     instructions: 'Du bist ein strenges, aber faires IHK-Doku-Prüfwerkzeug. Du gibst ausschließlich gültiges JSON zurück.',
     input: [{ role: 'user', content: inputContent }],
     max_output_tokens: maxOutputTokens
   });
 
-  return extractJsonObject(response.output_text || '{}');
+  return {
+    ...extractJsonObject(response.output_text || '{}'),
+    _aiMeta: {
+      model: aiConfig.model,
+      keySource: aiConfig.effectiveKeySource
+    }
+  };
 }
 
 function mergeAiReview(report, aiReview) {
@@ -1822,7 +1852,8 @@ function mergeAiReview(report, aiReview) {
   }
   report.ai = {
     used: true,
-    model,
+    model: aiReview?._aiMeta?.model || model,
+    keySource: aiReview?._aiMeta?.keySource || 'unknown',
     overallNote: aiReview?.overallNote || ''
   };
 
@@ -2036,6 +2067,88 @@ app.post('/api/references/scan', requireAuth, (_req, res) => {
   res.json(scanLocalReferences());
 });
 
+app.get('/api/ai-config', requireAuth, (req, res) => {
+  res.json(getAiProviderInfo(req.user));
+});
+
+app.post('/api/ai-config', requireAuth, async (req, res) => {
+  try {
+    const provider = String(req.body?.provider || 'openai').trim();
+    if (provider !== 'openai') {
+      return res.status(400).json({ error: 'Aktuell wird nur OpenAI unterstuetzt.' });
+    }
+
+    const validation = validateApiKeyInput(req.body?.apiKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    const user = await setUserApiKey(req.user.id, validation.apiKey, {
+      dataStore,
+      provider,
+      useOwnKey: req.body?.useOwnKey !== false,
+      existingConfig: req.user.aiConfig
+    });
+    res.json(getAiProviderInfo(user));
+  } catch (error) {
+    console.error('KI-Konfiguration konnte nicht gespeichert werden:', safeErrorMessage(error));
+    res.status(500).json({ error: safeErrorMessage(error, 'KI-Konfiguration konnte nicht gespeichert werden.') });
+  }
+});
+
+app.post('/api/ai-config/test', requireAuth, async (req, res) => {
+  try {
+    const temporaryKey = req.body?.apiKey;
+    let userForTest = req.user;
+
+    if (temporaryKey != null && temporaryKey !== '') {
+      const validation = validateApiKeyInput(temporaryKey);
+      if (validation.error) return res.status(400).json({ ok: false, message: validation.error });
+      const timestamp = new Date().toISOString();
+      userForTest = {
+        ...req.user,
+        aiConfig: {
+          provider: 'openai',
+          ...encryptApiKey(validation.apiKey),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          keyMask: maskApiKey(validation.apiKey),
+          useOwnKey: true
+        }
+      };
+    }
+
+    const aiConfig = getEffectiveAiConfig(userForTest);
+    const client = createClient(userForTest);
+    await client.responses.create({
+      model: aiConfig.model,
+      input: 'Antworte nur mit OK.',
+      max_output_tokens: 16
+    });
+
+    res.json({
+      ok: true,
+      provider: 'openai',
+      model: aiConfig.model,
+      keySource: aiConfig.effectiveKeySource,
+      message: 'KI-Verbindung erfolgreich.'
+    });
+  } catch (error) {
+    res.status(200).json({
+      ok: false,
+      message: safeErrorMessage(error, 'KI-Verbindung konnte nicht getestet werden.')
+    });
+  }
+});
+
+app.delete('/api/ai-config', requireAuth, async (req, res) => {
+  try {
+    const user = await clearUserApiKey(req.user.id, { dataStore });
+    res.json(getAiProviderInfo(user));
+  } catch (error) {
+    console.error('KI-Konfiguration konnte nicht geloescht werden:', safeErrorMessage(error));
+    res.status(500).json({ error: safeErrorMessage(error, 'KI-Konfiguration konnte nicht geloescht werden.') });
+  }
+});
+
 app.get('/api/auth/me', async (req, res) => {
   const user = await getSessionUser(req);
   if (!user) return res.status(401).json({ error: 'Nicht eingeloggt.' });
@@ -2195,9 +2308,10 @@ app.post('/api/chat', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Bitte eine Nachricht eingeben.' });
     }
 
-    const client = createClient();
+    const aiConfig = getEffectiveAiConfig(req.user);
+    const client = createClient(req.user);
     const response = await client.responses.create({
-      model,
+      model: aiConfig.model,
       instructions: buildInstructions(mode),
       input: buildPrompt({ message: message.trim(), history, context }),
       max_output_tokens: maxOutputTokens
@@ -2205,11 +2319,12 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
     res.json({
       answer: response.output_text || 'Es wurde keine Antwort erzeugt.',
-      model
+      model: aiConfig.model,
+      keySource: aiConfig.effectiveKeySource
     });
   } catch (error) {
-    console.error(error);
-    const message = error?.message || 'Unbekannter Serverfehler.';
+    console.error('Chat konnte nicht verarbeitet werden:', safeErrorMessage(error));
+    const message = safeErrorMessage(error);
     res.status(500).json({ error: message });
   }
 });
@@ -2239,10 +2354,11 @@ app.post('/api/analyze', requireAuth, upload.fields([
 
     if (options.aiReviewMode === 'simple') {
       try {
-        const aiReview = await runAiReview({ doc, AntragDoc, baseReport: report, options });
+        const aiReview = await runAiReview({ doc, AntragDoc, baseReport: report, options, user: req.user });
         mergeAiReview(report, aiReview);
       } catch (aiError) {
-        report.ai = { used: false, error: aiError.message };
+        const message = safeErrorMessage(aiError, aiUnavailableMessage());
+        report.ai = { used: false, error: message };
         addResult(
           report.results,
           'KI-Semantik',
@@ -2250,7 +2366,7 @@ app.post('/api/analyze', requireAuth, upload.fields([
           'grau',
           'nicht ausgeführt',
           '-',
-          `Die KI-Zusatzprüfung konnte nicht ausgeführt werden: ${aiError.message}`,
+          message,
           'API-Key, Modellname und Internetverbindung prüfen. Die regelbasierte Prüfung ist trotzdem vorhanden.',
           'mittel'
         );
@@ -2267,8 +2383,21 @@ app.post('/api/analyze', requireAuth, upload.fields([
         sections,
         baseReport: report,
         maxRounds: 3,
-        apiKeyAvailable: hasOpenAiApiKey()
+        apiKeyAvailable: hasOpenAiApiKey(req.user)
       });
+      if (!hasOpenAiApiKey(req.user)) {
+        addResult(
+          report.results,
+          'KI-Konsens',
+          'Multi-KI-Konsenspruefung',
+          'grau',
+          'nicht ausgefuehrt',
+          '-',
+          aiUnavailableMessage(),
+          'Eigenen API-Key speichern oder lokalen Standard-Key konfigurieren. Die regelbasierte Pruefung ist trotzdem vorhanden.',
+          'mittel'
+        );
+      }
     } else if (!report.aiConsensus) {
       report.aiConsensus = { enabled: false, maxRounds: 3, completedRounds: 0, consensusReached: false, openConflictCount: 0, manualReviewCount: 0, reviewedRuleCount: 0, items: [] };
     }
@@ -2284,8 +2413,8 @@ app.post('/api/analyze', requireAuth, upload.fields([
 
     res.json(report);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error?.message || 'Analyse konnte nicht durchgeführt werden.' });
+    console.error('Analyse konnte nicht durchgefuehrt werden:', safeErrorMessage(error));
+    res.status(500).json({ error: safeErrorMessage(error, 'Analyse konnte nicht durchgeführt werden.') });
   }
 });
 

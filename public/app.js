@@ -79,6 +79,12 @@ const profilePhotoInput = document.querySelector('#profilePhotoInput');
 const profileStatus = document.querySelector('#profileStatus');
 const saveProfileButton = document.querySelector('#saveProfileButton');
 const logoutButton = document.querySelector('#logoutButton');
+const aiConfigStatus = document.querySelector('#aiConfigStatus');
+const aiConfigMessage = document.querySelector('#aiConfigMessage');
+const aiApiKeyInput = document.querySelector('#aiApiKeyInput');
+const saveAiKeyButton = document.querySelector('#saveAiKeyButton');
+const testAiKeyButton = document.querySelector('#testAiKeyButton');
+const removeAiKeyButton = document.querySelector('#removeAiKeyButton');
 
 const panels = {
   checker: document.querySelector('#checkerPanel'),
@@ -136,6 +142,7 @@ let history = [];
 let quizHistory = [];
 let quizChatHistory = [];
 let quizConfig = null;
+let aiConfig = null;
 let ihkProfilesLoaded = false;
 let dokuSettings = { history: true, chat: true };
 let quizSettings = { dashboard: true, pool: true, history: true, chat: true };
@@ -232,6 +239,49 @@ function renderUser(user) {
     profileAvatarImage.removeAttribute('src');
     profileAvatarImage.classList.add('hidden');
     profileInitials.classList.remove('hidden');
+  }
+}
+
+function aiSourceLabel(source) {
+  return {
+    user: 'Eigener Key',
+    default_file: 'Standard-Key-Datei',
+    api_key_doku_tool: 'API_KEY_DOKU_TOOL',
+    openai_env: 'OPENAI_API_KEY',
+    none: 'kein Key'
+  }[source] || source || 'unbekannt';
+}
+
+function renderAiConfig(config = {}) {
+  aiConfig = config;
+  if (!aiConfigStatus) return;
+
+  const keyMask = config.keyMask ? ` (${escapeHtml(config.keyMask)})` : '';
+  if (config.hasOwnKey) {
+    aiConfigStatus.innerHTML = `<strong>Eigener Key aktiv${keyMask}</strong><small>Modell: ${escapeHtml(config.model || '-')}</small>`;
+  } else if (config.usingDefaultKey) {
+    aiConfigStatus.innerHTML = `<strong>Standard-Key aktiv</strong><small>${escapeHtml(aiSourceLabel(config.effectiveKeySource))} - Modell: ${escapeHtml(config.model || '-')}</small>`;
+  } else {
+    aiConfigStatus.innerHTML = '<strong>Kein Key verfuegbar</strong><small>KI-Chat und KI-Pruefung sind erst nach Konfiguration verfuegbar.</small>';
+  }
+
+  if (config.userKeyError) {
+    aiConfigMessage.textContent = config.userKeyError;
+  } else {
+    aiConfigMessage.textContent = '';
+  }
+  removeAiKeyButton.disabled = !config.hasOwnKey;
+}
+
+async function loadAiConfig() {
+  if (!currentUser || !aiConfigStatus) return;
+  aiConfigStatus.textContent = 'KI-Status wird geladen ...';
+  try {
+    const config = await apiFetch('/api/ai-config');
+    renderAiConfig(config);
+  } catch (error) {
+    aiConfigStatus.textContent = 'KI-Status konnte nicht geladen werden.';
+    aiConfigMessage.textContent = error.message;
   }
 }
 
@@ -631,6 +681,9 @@ showQuizChatToggle.addEventListener('change', () => {
 profileButton.addEventListener('click', () => {
   profileDropdown.classList.toggle('hidden');
   setupDropdown.classList.add('hidden');
+  if (!profileDropdown.classList.contains('hidden')) {
+    loadAiConfig();
+  }
   if (!profileDropdown.classList.contains('hidden') && !quizConfig) {
     loadQuizTool();
   }
@@ -673,6 +726,61 @@ profilePhotoInput.addEventListener('change', async () => {
     profileStatus.textContent = error.message;
   } finally {
     profilePhotoInput.value = '';
+  }
+});
+
+saveAiKeyButton?.addEventListener('click', async () => {
+  const apiKey = aiApiKeyInput.value;
+  saveAiKeyButton.disabled = true;
+  aiConfigMessage.textContent = 'API-Key wird gespeichert ...';
+  try {
+    const config = await apiFetch('/api/ai-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'openai', apiKey, useOwnKey: true })
+    });
+    aiApiKeyInput.value = '';
+    renderAiConfig(config);
+    aiConfigMessage.textContent = 'API-Key gespeichert.';
+  } catch (error) {
+    aiConfigMessage.textContent = error.message;
+  } finally {
+    saveAiKeyButton.disabled = false;
+  }
+});
+
+testAiKeyButton?.addEventListener('click', async () => {
+  testAiKeyButton.disabled = true;
+  aiConfigMessage.textContent = 'KI-Verbindung wird getestet ...';
+  try {
+    const body = aiApiKeyInput.value ? { apiKey: aiApiKeyInput.value } : {};
+    const result = await apiFetch('/api/ai-config/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    aiConfigMessage.textContent = result.ok
+      ? `${result.message} Quelle: ${aiSourceLabel(result.keySource)}.`
+      : result.message;
+  } catch (error) {
+    aiConfigMessage.textContent = error.message;
+  } finally {
+    testAiKeyButton.disabled = false;
+  }
+});
+
+removeAiKeyButton?.addEventListener('click', async () => {
+  removeAiKeyButton.disabled = true;
+  aiConfigMessage.textContent = 'Eigener API-Key wird entfernt ...';
+  try {
+    const config = await apiFetch('/api/ai-config', { method: 'DELETE' });
+    aiApiKeyInput.value = '';
+    renderAiConfig(config);
+    aiConfigMessage.textContent = 'Eigener API-Key entfernt.';
+  } catch (error) {
+    aiConfigMessage.textContent = error.message;
+  } finally {
+    removeAiKeyButton.disabled = !aiConfig?.hasOwnKey;
   }
 });
 

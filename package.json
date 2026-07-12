@@ -11,6 +11,7 @@
     "build:ruleset": "node scripts/build-fiae-ruleset.mjs",
     "validate:rulesets": "node scripts/validate-rulesets.mjs",
     "test:review": "node scripts/test-review-workflow.mjs",
+    "test:ai-config": "node scripts/test-ai-config.mjs",
     "references:import": "node scripts/import-references.mjs",
     "references:scan": "node scripts/scan-references.mjs",
     "validate:references": "node scripts/validate-references.mjs",
